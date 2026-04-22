@@ -5,9 +5,6 @@ const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://mobilebackend-aefo.o
 
 const api = axios.create({
   baseURL: API_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
   timeout: 45000,
 });
 
@@ -72,8 +69,11 @@ api.interceptors.response.use(
 export const authAPI = {
   register: async (formData: FormData) => {
     try {
-      // Let RN/axios set multipart boundary automatically.
-      return await api.post('/auth/register/', formData);
+      return await api.post('/auth/register/', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
     } catch (error: any) {
       const isNetworkFailure = error?.message === 'Network Error' || error?.code === 'ECONNABORTED';
       if (!isNetworkFailure) throw error;
@@ -320,7 +320,7 @@ export const walletAPI = {
 export const ratingAPI = {
   getRatings: () => api.get('/ratings/'),
   getPendingRatings: () => api.get('/ratings/pending/'),
-  createRating: (data: { delivery: number; rating: number; comment?: string }) => api.post('/ratings/', data),
+  createRating: (data: { delivery: number; rating: number; comment?: string; tip_amount?: number }) => api.post('/ratings/', data),
   getAllRatings: () => api.get('/ratings/all/'),
   getLowRatedRiders: () => api.get('/ratings/low-rated-riders/'),
 };

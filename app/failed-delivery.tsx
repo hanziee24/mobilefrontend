@@ -82,13 +82,15 @@ export default function FailedDelivery() {
       formData.append('failure_reason', reason);
       
       if (photo) {
-        const filename = photo.split('/').pop();
-        const match = /\.(\w+)$/.exec(filename || '');
-        const type = match ? `image/${match[1]}` : 'image/jpeg';
+        const filename = (photo.split('/').pop() || 'proof.jpg').replace(/[^a-zA-Z0-9._-]/g, '_');
+        const match = /\.([a-zA-Z0-9]+)$/.exec(filename);
+        const ext = match ? match[1].toLowerCase() : 'jpeg';
+        const allowedExts = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+        const type = allowedExts.includes(ext) ? `image/${ext === 'jpg' ? 'jpeg' : ext}` : 'image/jpeg';
         
         formData.append('proof_of_delivery', {
           uri: photo,
-          name: filename || 'proof.jpg',
+          name: filename,
           type,
         } as any);
       }

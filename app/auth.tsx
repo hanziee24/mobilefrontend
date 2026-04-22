@@ -9,12 +9,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
 
+const SPECIAL_CHAR_REGEX = /[!@#$%^&*(),.?":{}|<>]/;
+const USERNAME_REGEX = /^[a-zA-Z0-9_]+$/;
+
 const PASSWORD_RULES = [
   { label: 'At least 8 characters', test: (value: string) => value.length >= 8 },
   { label: 'One uppercase letter (A-Z)', test: (value: string) => /[A-Z]/.test(value) },
   { label: 'One lowercase letter (a-z)', test: (value: string) => /[a-z]/.test(value) },
   { label: 'One number (0-9)', test: (value: string) => /[0-9]/.test(value) },
-  { label: 'One special character (!@#$%^&*)', test: (value: string) => /[!@#$%^&*(),.?":{}|<>]/.test(value) },
+  { label: 'One special character (!@#$%^&*)', test: (value: string) => SPECIAL_CHAR_REGEX.test(value) },
 ];
 
 export default function AuthScreen() {
@@ -103,7 +106,7 @@ export default function AuthScreen() {
     if (!/[A-Z]/.test(pass)) return 'Password must contain at least one uppercase letter';
     if (!/[a-z]/.test(pass)) return 'Password must contain at least one lowercase letter';
     if (!/[0-9]/.test(pass)) return 'Password must contain at least one number';
-    if (!/[!@#$%^&*(),.?":{}|<>]/.test(pass)) return 'Password must contain at least one special character';
+    if (!SPECIAL_CHAR_REGEX.test(pass)) return 'Password must contain at least one special character';
     return null;
   };
 
@@ -222,7 +225,7 @@ export default function AuthScreen() {
     }
     if (!username.trim()) return 'Username is required';
     if (username.trim().length < 4) return 'Username must be at least 4 characters';
-    if (!/^[a-zA-Z0-9_]+$/.test(username.trim())) return 'Username can only contain letters, numbers, and underscores';
+    if (!USERNAME_REGEX.test(username.trim())) return 'Username can only contain letters, numbers, and underscores';
     const pwErr = validatePassword(password);
     if (pwErr) return pwErr;
     if (password !== confirmPassword) return 'Passwords do not match';
@@ -392,7 +395,7 @@ export default function AuthScreen() {
             </View>
             <View>
               <Text style={styles.brandName}>JRNZ Tracking Express</Text>
-              <Text style={styles.brandSub}>Inspired by J&T speed and reliability</Text>
+              <Text style={styles.brandSub}>Speed and reliability</Text>
             </View>
           </View>
 

@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Modal, Image, TextInput } from 'react-native';
+﻿import { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Modal, Image, TextInput, PanResponder } from 'react-native';
 import { router } from 'expo-router';
 import { authAPI, deliveryAPI } from '../services/api';
 import { resolveMediaUrl } from '../utils/media';
@@ -170,13 +170,102 @@ function UserDetailModal({ visible, user, branches, onClose, onApprove, onReject
   const [rejectReason, setRejectReason] = useState('');
   const [branchExpanded, setBranchExpanded] = useState(false);
   const [assigningBranch, setAssigningBranch] = useState(false);
+  const [previewImage, setPreviewImage] = useState<{ uri: string; label: string } | null>(null);
+  const [previewScale, setPreviewScale] = useState(1);
+  const [previewOffset, setPreviewOffset] = useState({ x: 0, y: 0 });
+  const scaleRef = useRef(1);
+  const offsetRef = useRef({ x: 0, y: 0 });
+  const panStartRef = useRef({ x: 0, y: 0 });
+  const zoomStep = 0.25;
+  const minZoom = 1;
+  const maxZoom = 4;
+  const previewImageSize = { width: 320, height: 420 };
+
+  const clampOffset = (x: number, y: number, scale: number) => {
+    if (scale <= 1) return { x: 0, y: 0 };
+    const maxX = (previewImageSize.width * (scale - 1)) / 2;
+    const maxY = (previewImageSize.height * (scale - 1)) / 2;
+    return {
+      x: Math.max(-maxX, Math.min(maxX, x)),
+      y: Math.max(-maxY, Math.min(maxY, y)),
+    };
+  };
+
+  const previewPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => scaleRef.current > 1,
+      onMoveShouldSetPanResponder: () => scaleRef.current > 1,
+      onPanResponderGrant: () => {
+        panStartRef.current = { ...offsetRef.current };
+      },
+      onPanResponderMove: (_, gestureState) => {
+        if (scaleRef.current <= 1) return;
+        const next = clampOffset(
+          panStartRef.current.x + gestureState.dx,
+          panStartRef.current.y + gestureState.dy,
+          scaleRef.current
+        );
+        offsetRef.current = next;
+        setPreviewOffset(next);
+      },
+      onPanResponderRelease: () => {
+        panStartRef.current = { ...offsetRef.current };
+      },
+      onPanResponderTerminate: () => {
+        panStartRef.current = { ...offsetRef.current };
+      },
+    })
+  ).current;
 
   if (!user) return null;
 
-  const idImageUrl = resolveMediaUrl(user.identity_image);
+  const motorcycleRegistrationUrl = resolveMediaUrl(user.motorcycle_registration);
   const photoFrontUrl = resolveMediaUrl(user.photo_front);
   const photoLeftUrl = resolveMediaUrl(user.photo_left);
   const photoRightUrl = resolveMediaUrl(user.photo_right);
+
+  const openImagePreview = (uri: string, label: string) => {
+    setPreviewImage({ uri, label });
+    setPreviewScale(1);
+    setPreviewOffset({ x: 0, y: 0 });
+    scaleRef.current = 1;
+    offsetRef.current = { x: 0, y: 0 };
+    panStartRef.current = { x: 0, y: 0 };
+  };
+
+  const closeImagePreview = () => {
+    setPreviewImage(null);
+    setPreviewScale(1);
+    setPreviewOffset({ x: 0, y: 0 });
+    scaleRef.current = 1;
+    offsetRef.current = { x: 0, y: 0 };
+    panStartRef.current = { x: 0, y: 0 };
+  };
+
+  const handleZoomIn = () => {
+    setPreviewScale((current) => {
+      const next = Math.min(maxZoom, Number((current + zoomStep).toFixed(2)));
+      scaleRef.current = next;
+      if (next === 1) {
+        setPreviewOffset({ x: 0, y: 0 });
+        offsetRef.current = { x: 0, y: 0 };
+      }
+      return next;
+    });
+  };
+
+  const handleZoomOut = () => {
+    setPreviewScale((current) => {
+      const next = Math.max(minZoom, Number((current - zoomStep).toFixed(2)));
+      scaleRef.current = next;
+      if (next === 1) {
+        setPreviewOffset({ x: 0, y: 0 });
+        offsetRef.current = { x: 0, y: 0 };
+        panStartRef.current = { x: 0, y: 0 };
+      }
+      return next;
+    });
+  };
 
   const handleRejectSubmit = () => {
     if (!rejectReason.trim()) {
@@ -288,20 +377,24 @@ function UserDetailModal({ visible, user, branches, onClose, onApprove, onReject
 
               <View style={styles.infoSection}>
                 <Text style={styles.infoSectionTitle}>Identity Verification</Text>
-                <Text style={styles.idLabel}>ID Document</Text>
-                {idImageUrl ? (
-                  <Image source={{ uri: idImageUrl }} style={styles.idImage} resizeMode="contain" />
+                <Text style={styles.idLabel}>Motorcycle Registration</Text>
+                {motorcycleRegistrationUrl ? (
+                  <TouchableOpacity style={{ width: '100%' }} activeOpacity={0.9} onPress={() => openImagePreview(motorcycleRegistrationUrl, 'Motorcycle Registration')}>
+                    <Image source={{ uri: motorcycleRegistrationUrl }} style={styles.idImage} resizeMode="contain" />
+                  </TouchableOpacity>
                 ) : (
                   <View style={styles.noIdBox}>
-                    <Text style={styles.noIdText}>⚠️ No ID uploaded</Text>
+                    <Text style={styles.noIdText}>⚠️ No registration uploaded</Text>
                   </View>
                 )}
-                <Text style={[styles.idLabel, { marginTop: 14 }]}>Vehicle Photos</Text>
+                <Text style={[styles.idLabel, { marginTop: 14 }]}>Rider Photos</Text>
                 <View style={styles.photoRow}>
                   {[{ label: 'Front', url: photoFrontUrl }, { label: 'Left', url: photoLeftUrl }, { label: 'Right', url: photoRightUrl }].map(({ label, url }) => (
                     <View key={label} style={styles.photoThumbWrap}>
                       {url ? (
-                        <Image source={{ uri: url }} style={styles.photoThumb} resizeMode="cover" />
+                        <TouchableOpacity style={{ width: '100%' }} activeOpacity={0.9} onPress={() => openImagePreview(url, `${label} Photo`)}>
+                          <Image source={{ uri: url }} style={styles.photoThumb} resizeMode="cover" />
+                        </TouchableOpacity>
                       ) : (
                         <View style={[styles.photoThumb, styles.noPhotoThumb]}>
                           <Text style={styles.noPhotoText}>—</Text>
@@ -329,6 +422,42 @@ function UserDetailModal({ visible, user, branches, onClose, onApprove, onReject
               )}
             </ScrollView>
           </View>
+        </View>
+      </Modal>
+
+      <Modal visible={!!previewImage} transparent animationType="fade" onRequestClose={closeImagePreview}>
+        <View style={styles.imagePreviewOverlay}>
+          <View style={styles.imagePreviewHeader}>
+            <Text style={styles.imagePreviewTitle}>{previewImage?.label || 'Image Preview'}</Text>
+            <TouchableOpacity onPress={closeImagePreview}>
+              <Text style={styles.imagePreviewClose}>✕</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.imagePreviewBody}>
+            {previewImage && (
+              <>
+                <View style={styles.imagePreviewGestureArea} {...previewPanResponder.panHandlers}>
+                  <Image
+                    source={{ uri: previewImage.uri }}
+                    style={[styles.imagePreviewImage, { transform: [{ translateX: previewOffset.x }, { translateY: previewOffset.y }, { scale: previewScale }] }]}
+                    resizeMode="contain"
+                  />
+                </View>
+                <View style={styles.zoomControls}>
+                  <TouchableOpacity style={styles.zoomBtn} onPress={handleZoomOut}>
+                    <Text style={styles.zoomBtnText}>-</Text>
+                  </TouchableOpacity>
+                  <Text style={styles.zoomValue}>{Math.round(previewScale * 100)}%</Text>
+                  <TouchableOpacity style={styles.zoomBtn} onPress={handleZoomIn}>
+                    <Text style={styles.zoomBtnText}>+</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </View>
+          <Text style={styles.imagePreviewHint}>
+            Use the plus and minus buttons to zoom
+          </Text>
         </View>
       </Modal>
 
@@ -455,4 +584,17 @@ const styles = StyleSheet.create({
   branchOptionText: { fontSize: 15, color: '#333', fontWeight: '600' },
   branchOptionTextActive: { color: '#ED1C24' },
   branchOptionSub: { fontSize: 12, color: '#888', marginTop: 2 },
+  imagePreviewOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', paddingTop: 50, paddingBottom: 30, paddingHorizontal: 18 },
+  imagePreviewHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  imagePreviewTitle: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  imagePreviewClose: { color: '#fff', fontSize: 22, fontWeight: '700', paddingHorizontal: 8 },
+  imagePreviewBody: { flex: 1, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  imagePreviewGestureArea: { width: '100%', flex: 1, alignItems: 'center', justifyContent: 'center' },
+  imagePreviewImage: { width: 320, height: 420 },
+  zoomControls: { flexDirection: 'row', alignItems: 'center', gap: 14, marginTop: 16 },
+  zoomBtn: { width: 46, height: 46, borderRadius: 23, backgroundColor: 'rgba(255,255,255,0.12)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)', alignItems: 'center', justifyContent: 'center' },
+  zoomBtnText: { color: '#fff', fontSize: 24, fontWeight: '700', lineHeight: 26 },
+  zoomValue: { color: '#fff', fontSize: 13, fontWeight: '700', minWidth: 52, textAlign: 'center' },
+  imagePreviewHint: { marginTop: 10, color: 'rgba(255,255,255,0.85)', textAlign: 'center', fontSize: 12, fontWeight: '500' },
 });
+

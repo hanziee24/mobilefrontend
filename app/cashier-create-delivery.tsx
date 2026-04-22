@@ -76,6 +76,7 @@ export default function CashierCreateDelivery() {
       setQuantity(req.quantity || '');
       setIsFragile(req.is_fragile || false);
       setSpecialInstructions(req.special_instructions || '');
+      if (req.preferred_payment_method) setPaymentMethod(req.preferred_payment_method);
     }).catch(() => {});
   }, []);
 

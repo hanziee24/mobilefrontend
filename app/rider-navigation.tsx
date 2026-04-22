@@ -81,7 +81,7 @@ export default function RiderNavigation() {
         longitude: results[0].longitude,
       };
     } catch (error) {
-      console.log('Geocode failed for address:', address);
+      console.log('Geocode failed for address:', address.replace(/[\r\n]/g, ' '));
       return null;
     }
   };
@@ -125,11 +125,19 @@ export default function RiderNavigation() {
       const GOOGLE_API_KEY = process.env.GOOGLE_MAPS_API_KEY;
 
       if (GOOGLE_API_KEY) {
+        const originLat = Number(origin.latitude);
+        const originLng = Number(origin.longitude);
+        const destLat = Number(destination.latitude);
+        const destLng = Number(destination.longitude);
+        if (!Number.isFinite(originLat) || !Number.isFinite(originLng) || !Number.isFinite(destLat) || !Number.isFinite(destLng)) {
+          setRouteCoordinates([origin, destination]);
+          return;
+        }
         const googleUrl =
           `https://maps.googleapis.com/maps/api/directions/json?` +
-          `origin=${origin.latitude},${origin.longitude}&` +
-          `destination=${destination.latitude},${destination.longitude}&` +
-          `mode=driving&key=${GOOGLE_API_KEY}`;
+          `origin=${originLat},${originLng}&` +
+          `destination=${destLat},${destLng}&` +
+          `mode=driving&key=${encodeURIComponent(GOOGLE_API_KEY)}`;
 
         const googleRes = await fetch(googleUrl);
         const googleData = await googleRes.json();
@@ -147,9 +155,17 @@ export default function RiderNavigation() {
       }
 
       // Fallback road route provider if Google key is unavailable/limited.
+      const oLat = Number(origin.latitude);
+      const oLng = Number(origin.longitude);
+      const dLat = Number(destination.latitude);
+      const dLng = Number(destination.longitude);
+      if (!Number.isFinite(oLat) || !Number.isFinite(oLng) || !Number.isFinite(dLat) || !Number.isFinite(dLng)) {
+        setRouteCoordinates([origin, destination]);
+        return;
+      }
       const osrmUrl =
         `https://router.project-osrm.org/route/v1/driving/` +
-        `${origin.longitude},${origin.latitude};${destination.longitude},${destination.latitude}` +
+        `${oLng},${oLat};${dLng},${dLat}` +
         `?overview=full&geometries=geojson`;
       const osrmRes = await fetch(osrmUrl);
       const osrmData = await osrmRes.json();

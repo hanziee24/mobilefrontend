@@ -169,6 +169,9 @@ export default function CashierDashboard() {
                   <Text style={styles.requestName}>{req.sender_name} → {req.receiver_name}</Text>
                   <Text style={styles.requestDetail}>{req.item_type} • {req.weight}kg • Qty: {req.quantity}{req.is_fragile ? ' • ⚠️ Fragile' : ''}</Text>
                   <Text style={styles.requestAddress} numberOfLines={1}>📍 {req.receiver_address}</Text>
+                  {req.preferred_payment_method && (
+                    <Text style={styles.requestPayment}>💳 Prefers: {req.preferred_payment_method.replace('_', ' ')}</Text>
+                  )}
                 </View>
                 <View style={styles.requestBtns}>
                   <TouchableOpacity style={styles.acceptBtn} onPress={() => handleAcceptRequest(req)}>
@@ -268,6 +271,7 @@ const styles = StyleSheet.create({
   requestName: { fontSize: 14, fontWeight: '700', color: '#1a1a1a', marginBottom: 2 },
   requestDetail: { fontSize: 12, color: '#666', marginBottom: 2 },
   requestAddress: { fontSize: 11, color: '#999' },
+  requestPayment: { fontSize: 11, color: '#1565C0', fontWeight: '600', marginTop: 2 },
   requestBtns: { gap: 6 },
   acceptBtn: { backgroundColor: '#ED1C24', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8 },
   acceptBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },

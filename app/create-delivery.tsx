@@ -63,6 +63,7 @@ export default function CreateDelivery() {
   const [isFragile, setIsFragile] = useState(false);
   const [packagePhoto, setPackagePhoto] = useState<string | null>(null);
   const [specialInstructions, setSpecialInstructions] = useState('');
+  const [preferredPayment, setPreferredPayment] = useState<'CASH' | 'GCASH' | 'MAYA' | 'BANK_TRANSFER' | 'CREDIT_CARD'>('CASH');
   const [loading, setLoading] = useState(false);
   const [feeConfig, setFeeConfig] = useState({ base_fee: 50, per_kg_rate: 15, per_item_rate: 10 });
   const [showMapPicker, setShowMapPicker] = useState(false);
@@ -121,6 +122,7 @@ export default function CreateDelivery() {
         quantity,
         is_fragile: isFragile,
         special_instructions: specialInstructions,
+      preferred_payment_method: preferredPayment,
       });
       setTrackingHint(res?.data?.tracking_number || '');
       setSubmitted(true);
@@ -290,6 +292,29 @@ export default function CreateDelivery() {
           </View>
         )}
 
+        <View style={styles.sectionTitleRow}>
+          <Text style={{ fontSize: 17 }}>💳</Text>
+          <Text style={styles.sectionTitle}>Preferred Payment Method</Text>
+        </View>
+        <Text style={{ fontSize: 12, color: '#888', marginBottom: 10 }}>Let the cashier know how you'd like to pay when you arrive.</Text>
+        <View style={styles.paymentGrid}>
+          {([
+            { key: 'CASH', label: '💵 Cash' },
+            { key: 'GCASH', label: '📱 GCash' },
+            { key: 'MAYA', label: '💜 Maya' },
+            { key: 'BANK_TRANSFER', label: '🏦 Bank Transfer' },
+            { key: 'CREDIT_CARD', label: '💳 Credit/Debit Card' },
+          ] as const).map(({ key, label }) => (
+            <TouchableOpacity
+              key={key}
+              style={[styles.paymentBtn, preferredPayment === key && styles.paymentBtnActive]}
+              onPress={() => setPreferredPayment(key)}
+            >
+              <Text style={[styles.paymentBtnText, preferredPayment === key && styles.paymentBtnTextActive]}>{label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
         <TouchableOpacity style={[styles.submitBtn, loading && { opacity: 0.6 }]} onPress={handleSendToCashier} disabled={loading}>
           <View style={styles.submitBtnInner}>
             {!loading && <SendHorizontal size={18} color="#fff" />}
@@ -378,4 +403,9 @@ const styles = StyleSheet.create({
   submitBtn: { backgroundColor: '#ED1C24', padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 20 },
   submitBtnInner: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   submitBtnText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+  paymentGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 },
+  paymentBtn: { paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10, borderWidth: 2, borderColor: '#ddd', backgroundColor: '#fff' },
+  paymentBtnActive: { borderColor: '#ED1C24', backgroundColor: '#FFF0F0' },
+  paymentBtnText: { fontSize: 13, fontWeight: '600', color: '#666' },
+  paymentBtnTextActive: { color: '#ED1C24' },
 });

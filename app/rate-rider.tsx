@@ -17,8 +17,11 @@ export default function RateRider() {
   const [selectedDelivery, setSelectedDelivery] = useState<PendingDelivery | null>(null);
   const [rating, setRating] = useState(0);
   const [review, setReview] = useState('');
+  const [tipAmount, setTipAmount] = useState('');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+
+  const PRESET_TIPS = [20, 50, 100];
 
   useEffect(() => {
     fetchPendingRatings();
@@ -45,18 +48,25 @@ export default function RateRider() {
     }
     if (!selectedDelivery) return;
 
+    const parsedTip = parseFloat(tipAmount);
+    if (tipAmount && (isNaN(parsedTip) || parsedTip < 0)) {
+      Alert.alert('Invalid Tip', 'Please enter a valid tip amount');
+      return;
+    }
+
     setSubmitting(true);
     try {
       await ratingAPI.createRating({
         delivery: selectedDelivery.id,
         rating,
         comment: review || undefined,
+        tip_amount: tipAmount ? parsedTip : undefined,
       });
       Alert.alert('Success', 'Thank you for your feedback!', [
         { text: 'OK', onPress: () => {
-          // Reset and fetch again
           setRating(0);
           setReview('');
+          setTipAmount('');
           fetchPendingRatings();
         }}
       ]);
@@ -159,6 +169,29 @@ export default function RateRider() {
               />
             </View>
 
+            <View style={styles.tipSection}>
+              <Text style={styles.label}>Leave a tip (optional)</Text>
+              <View style={styles.presetTips}>
+                {PRESET_TIPS.map((preset) => (
+                  <TouchableOpacity
+                    key={preset}
+                    style={[styles.presetBtn, tipAmount === String(preset) && styles.presetBtnActive]}
+                    onPress={() => setTipAmount(tipAmount === String(preset) ? '' : String(preset))}
+                  >
+                    <Text style={[styles.presetBtnText, tipAmount === String(preset) && styles.presetBtnTextActive]}>₱{preset}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <TextInput
+                style={styles.tipInput}
+                placeholder="Or enter custom amount"
+                value={tipAmount}
+                onChangeText={setTipAmount}
+                keyboardType="decimal-pad"
+                placeholderTextColor="#999"
+              />
+            </View>
+
             <TouchableOpacity 
               style={[styles.submitButton, submitting && styles.submitButtonDisabled]} 
               onPress={handleSubmit}
@@ -251,6 +284,37 @@ const styles = StyleSheet.create({
     backgroundColor: '#f9f9f9',
     textAlignVertical: 'top',
     minHeight: 100,
+  },
+  tipSection: {
+    backgroundColor: '#fff',
+    borderRadius: 15,
+    padding: 20,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  presetTips: { flexDirection: 'row', gap: 10, marginBottom: 12 },
+  presetBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    alignItems: 'center',
+  },
+  presetBtnActive: { borderColor: '#ED1C24', backgroundColor: '#FFF0F0' },
+  presetBtnText: { fontSize: 14, fontWeight: '600', color: '#555' },
+  presetBtnTextActive: { color: '#ED1C24' },
+  tipInput: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 10,
+    padding: 12,
+    fontSize: 15,
+    backgroundColor: '#f9f9f9',
   },
   submitButton: {
     backgroundColor: '#ED1C24',
