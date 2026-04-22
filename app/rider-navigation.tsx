@@ -1,9 +1,9 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Linking, Alert, ActivityIndicator, ScrollView } from 'react-native';
 import { router } from 'expo-router';
 import { deliveryAPI } from '../services/api';
 import * as Location from 'expo-location';
-import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
+import { WebView } from 'react-native-webview';
 import { locationService } from '../services/locationService';
 import {
   ArrowLeft,
@@ -17,6 +17,73 @@ import {
 
 type RoutePoint = { latitude: number; longitude: number };
 
+function getLeafletHTML(
+  pickupCoords: RoutePoint | null,
+  deliveryCoords: RoutePoint | null,
+  riderLocation: RoutePoint | null,
+  routeCoordinates: RoutePoint[],
+  delivery: any
+) {
+  const center = deliveryCoords
+    ? [deliveryCoords.latitude, deliveryCoords.longitude]
+    : riderLocation
+      ? [riderLocation.latitude, riderLocation.longitude]
+      : [10.3157, 123.8854];
+
+  const route = routeCoordinates.length > 1
+    ? routeCoordinates
+    : riderLocation && deliveryCoords
+      ? [riderLocation, deliveryCoords]
+      : pickupCoords && deliveryCoords
+        ? [pickupCoords, deliveryCoords]
+        : [];
+
+  const routeLatLngs = JSON.stringify(route.map(p => [p.latitude, p.longitude]));
+  const deliveryLatLng = deliveryCoords ? JSON.stringify([deliveryCoords.latitude, deliveryCoords.longitude]) : 'null';
+  const riderLatLng = riderLocation ? JSON.stringify([riderLocation.latitude, riderLocation.longitude]) : 'null';
+  const receiverName = delivery?.receiver_name || '';
+  const deliveryAddress = delivery?.delivery_address?.split('|')[0] || '';
+
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>* { margin:0; padding:0; } html,body,#map { width:100%; height:100%; }</style>
+</head>
+<body>
+  <div id="map"></div>
+  <script>
+    var map = L.map('map').setView(${JSON.stringify(center)}, 14);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OSM' }).addTo(map);
+
+    var riderIcon = L.divIcon({ html: '<div style="font-size:28px">🏍️</div>', className: '', iconAnchor: [14,14] });
+    var destIcon = L.divIcon({ html: '<div style="font-size:28px">📦</div>', className: '', iconAnchor: [14,28] });
+
+    window.routeLine = L.polyline(${routeLatLngs}, { color: '#ED1C24', weight: 4 }).addTo(map);
+
+    if (${deliveryLatLng}) {
+      window.deliveryMarker = L.marker(${deliveryLatLng}, { icon: destIcon })
+        .bindPopup('<b>${receiverName}</b><br>${deliveryAddress}')
+        .addTo(map);
+    }
+
+    if (${riderLatLng}) {
+      window.riderMarker = L.marker(${riderLatLng}, { icon: riderIcon })
+        .bindPopup('Your Location')
+        .addTo(map);
+    }
+
+    if (${routeLatLngs}.length > 1) {
+      map.fitBounds(window.routeLine.getBounds(), { padding: [40, 40] });
+    }
+  </script>
+</body>
+</html>`;
+}
+
 export default function RiderNavigation() {
   const [delivery, setDelivery] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -25,6 +92,7 @@ export default function RiderNavigation() {
   const [deliveryCoords, setDeliveryCoords] = useState<any>(null);
   const [routeCoordinates, setRouteCoordinates] = useState<RoutePoint[]>([]);
   const [isTrackingActive, setIsTrackingActive] = useState(false);
+  const webViewRef = useRef<WebView>(null);
 
   useEffect(() => {
     fetchDelivery();
@@ -51,6 +119,10 @@ export default function RiderNavigation() {
       setRouteCoordinates([]);
     }
   }, [riderLocation, pickupCoords, deliveryCoords]);
+
+  useEffect(() => {
+    updateLeafletMap();
+  }, [routeCoordinates, deliveryCoords]);
 
   const parseAddressWithCoords = (rawAddress: string) => {
     const [addressPart, coordsPart] = (rawAddress || '').split('|');
@@ -86,75 +158,8 @@ export default function RiderNavigation() {
     }
   };
 
-  const decodePolyline = (encoded: string): RoutePoint[] => {
-    const points: RoutePoint[] = [];
-    let index = 0;
-    let lat = 0;
-    let lng = 0;
-
-    while (index < encoded.length) {
-      let b: number;
-      let shift = 0;
-      let result = 0;
-      do {
-        b = encoded.charCodeAt(index++) - 63;
-        result |= (b & 0x1f) << shift;
-        shift += 5;
-      } while (b >= 0x20);
-      const dlat = (result & 1) !== 0 ? ~(result >> 1) : result >> 1;
-      lat += dlat;
-
-      shift = 0;
-      result = 0;
-      do {
-        b = encoded.charCodeAt(index++) - 63;
-        result |= (b & 0x1f) << shift;
-        shift += 5;
-      } while (b >= 0x20);
-      const dlng = (result & 1) !== 0 ? ~(result >> 1) : result >> 1;
-      lng += dlng;
-
-      points.push({ latitude: lat / 1e5, longitude: lng / 1e5 });
-    }
-
-    return points;
-  };
-
   const fetchRoadRoute = async (origin: RoutePoint, destination: RoutePoint) => {
     try {
-      const GOOGLE_API_KEY = process.env.GOOGLE_MAPS_API_KEY;
-
-      if (GOOGLE_API_KEY) {
-        const originLat = Number(origin.latitude);
-        const originLng = Number(origin.longitude);
-        const destLat = Number(destination.latitude);
-        const destLng = Number(destination.longitude);
-        if (!Number.isFinite(originLat) || !Number.isFinite(originLng) || !Number.isFinite(destLat) || !Number.isFinite(destLng)) {
-          setRouteCoordinates([origin, destination]);
-          return;
-        }
-        const googleUrl =
-          `https://maps.googleapis.com/maps/api/directions/json?` +
-          `origin=${originLat},${originLng}&` +
-          `destination=${destLat},${destLng}&` +
-          `mode=driving&key=${encodeURIComponent(GOOGLE_API_KEY)}`;
-
-        const googleRes = await fetch(googleUrl);
-        const googleData = await googleRes.json();
-
-        if (googleData?.status === 'OK' && googleData.routes?.length > 0) {
-          const encoded = googleData.routes[0]?.overview_polyline?.points;
-          if (encoded) {
-            const decoded = decodePolyline(encoded);
-            if (decoded.length > 1) {
-              setRouteCoordinates(decoded);
-              return;
-            }
-          }
-        }
-      }
-
-      // Fallback road route provider if Google key is unavailable/limited.
       const oLat = Number(origin.latitude);
       const oLng = Number(origin.longitude);
       const dLat = Number(destination.latitude);
@@ -169,7 +174,6 @@ export default function RiderNavigation() {
         `?overview=full&geometries=geojson`;
       const osrmRes = await fetch(osrmUrl);
       const osrmData = await osrmRes.json();
-
       if (osrmData?.routes?.length > 0) {
         const coords: RoutePoint[] = osrmData.routes[0].geometry.coordinates.map((c: number[]) => ({
           latitude: c[1],
@@ -180,12 +184,35 @@ export default function RiderNavigation() {
           return;
         }
       }
-
       setRouteCoordinates([origin, destination]);
-    } catch (error) {
-      console.log('Road route fetch failed');
+    } catch {
       setRouteCoordinates([origin, destination]);
     }
+  };
+
+  const updateLeafletMap = () => {
+    if (!webViewRef.current) return;
+    const route = routeCoordinates.length > 1
+      ? routeCoordinates
+      : riderLocation && deliveryCoords
+        ? [riderLocation, deliveryCoords]
+        : pickupCoords && deliveryCoords
+          ? [pickupCoords, deliveryCoords]
+          : [];
+    const routeJson = JSON.stringify(route.map(p => [p.latitude, p.longitude]));
+    const deliveryJson = deliveryCoords ? JSON.stringify([deliveryCoords.latitude, deliveryCoords.longitude]) : 'null';
+    webViewRef.current.injectJavaScript(`
+      if (window.deliveryMarker && ${deliveryJson}) {
+        window.deliveryMarker.setLatLng(${deliveryJson});
+      }
+      if (window.routeLine) {
+        window.routeLine.setLatLngs(${routeJson});
+      }
+      if (${routeJson}.length > 0) {
+        map.fitBounds(window.routeLine.getBounds(), { padding: [40, 40] });
+      }
+      true;
+    `);
   };
 
   const fetchDelivery = async () => {
@@ -319,93 +346,14 @@ export default function RiderNavigation() {
         <View style={{ width: 30 }} />
       </View>
 
-      {pickupCoords && deliveryCoords ? (
-        <MapView
-          provider={PROVIDER_GOOGLE}
-          style={styles.map}
-          initialRegion={{
-            latitude: (pickupCoords.latitude + deliveryCoords.latitude) / 2,
-            longitude: (pickupCoords.longitude + deliveryCoords.longitude) / 2,
-            latitudeDelta: Math.abs(pickupCoords.latitude - deliveryCoords.latitude) * 2 || 0.05,
-            longitudeDelta: Math.abs(pickupCoords.longitude - deliveryCoords.longitude) * 2 || 0.05,
-          }}
-          showsUserLocation
-          showsMyLocationButton
-        >
-          <Marker
-            coordinate={deliveryCoords}
-            title="Delivery Location (Receiver)"
-            description={`${delivery.receiver_name} - ${delivery.delivery_address.split('|')[0]}`}
-            pinColor="red"
-          />
-          <Polyline
-            coordinates={
-              routeCoordinates.length > 1
-                ? routeCoordinates
-                : riderLocation
-                  ? [riderLocation, deliveryCoords]
-                  : [pickupCoords, deliveryCoords]
-            }
-            strokeColor="#ED1C24"
-            strokeWidth={4}
-          />
-        </MapView>
-      ) : deliveryCoords && riderLocation ? (
-        <MapView
-          provider={PROVIDER_GOOGLE}
-          style={styles.map}
-          initialRegion={{
-            latitude: (riderLocation.latitude + deliveryCoords.latitude) / 2,
-            longitude: (riderLocation.longitude + deliveryCoords.longitude) / 2,
-            latitudeDelta: Math.abs(riderLocation.latitude - deliveryCoords.latitude) * 2 || 0.05,
-            longitudeDelta: Math.abs(riderLocation.longitude - deliveryCoords.longitude) * 2 || 0.05,
-          }}
-          showsUserLocation
-          showsMyLocationButton
-        >
-          <Marker
-            coordinate={deliveryCoords}
-            title="Delivery Location (Receiver)"
-            description={`${delivery.receiver_name} - ${delivery.delivery_address.split('|')[0]}`}
-            pinColor="red"
-          />
-          <Polyline
-            coordinates={routeCoordinates.length > 1 ? routeCoordinates : [riderLocation, deliveryCoords]}
-            strokeColor="#ED1C24"
-            strokeWidth={4}
-          />
-        </MapView>
-      ) : deliveryCoords ? (
-        <MapView
-          provider={PROVIDER_GOOGLE}
-          style={styles.map}
-          initialRegion={{
-            latitude: deliveryCoords.latitude,
-            longitude: deliveryCoords.longitude,
-            latitudeDelta: 0.05,
-            longitudeDelta: 0.05,
-          }}
-          showsUserLocation
-          showsMyLocationButton
-        >
-          <Marker
-            coordinate={deliveryCoords}
-            title="Delivery Location (Receiver)"
-            description={`${delivery.receiver_name} - ${delivery.delivery_address.split('|')[0]}`}
-            pinColor="red"
-          />
-        </MapView>
-      ) : riderLocation ? (
-        <View style={styles.mapPlaceholder}>
-          <MapPinned size={56} color="#ED1C24" strokeWidth={2} />
-          <Text style={styles.mapText}>Loading receiver location...</Text>
-        </View>
-      ) : (
-        <View style={styles.mapPlaceholder}>
-          <MapPinned size={56} color="#ED1C24" strokeWidth={2} />
-          <Text style={styles.mapText}>Loading Map...</Text>
-        </View>
-      )}
+      <WebView
+        ref={webViewRef}
+        style={styles.map}
+        javaScriptEnabled
+        domStorageEnabled
+        originWhitelist={['*']}
+        source={{ html: getLeafletHTML(pickupCoords, deliveryCoords, riderLocation, routeCoordinates, delivery) }}
+      />
 
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
         <View style={styles.infoCard}>

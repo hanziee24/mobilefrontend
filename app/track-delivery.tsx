@@ -2,7 +2,52 @@ import { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { deliveryAPI } from '../services/api';
-import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
+import { WebView } from 'react-native-webview';
+
+function getTrackingLeafletHTML(riderLocation: any, deliveryCoords: any, delivery: any) {
+  const riderLatLng = JSON.stringify([riderLocation.latitude, riderLocation.longitude]);
+  const deliveryLatLng = deliveryCoords ? JSON.stringify([deliveryCoords.latitude, deliveryCoords.longitude]) : 'null';
+  const riderName = `${delivery?.rider_details?.first_name || ''} ${delivery?.rider_details?.last_name || ''}`.trim();
+
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>* { margin:0; padding:0; } html,body,#map { width:100%; height:100%; }</style>
+</head>
+<body>
+  <div id="map"></div>
+  <script>
+    var map = L.map('map').setView(${riderLatLng}, 15);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OSM' }).addTo(map);
+
+    var riderIcon = L.divIcon({
+      html: '<div style="background:#fff;border:2px solid #ED1C24;border-radius:50%;padding:4px;font-size:22px;box-shadow:0 2px 6px rgba(0,0,0,0.3)">🏍️</div>',
+      className: '', iconAnchor: [18, 18]
+    });
+
+    window.riderMarker = L.marker(${riderLatLng}, { icon: riderIcon })
+      .bindPopup('${riderName || 'Your Rider'}')
+      .addTo(map);
+
+    if (${deliveryLatLng}) {
+      window.destMarker = L.marker(${deliveryLatLng})
+        .bindPopup('Delivery Location')
+        .addTo(map);
+
+      window.routeLine = L.polyline([${riderLatLng}, ${deliveryLatLng}], {
+        color: '#ED1C24', weight: 3, dashArray: '6, 3'
+      }).addTo(map);
+
+      map.fitBounds([${riderLatLng}, ${deliveryLatLng}], { padding: [40, 40] });
+    }
+  </script>
+</body>
+</html>`;
+}
 
 export default function TrackDelivery() {
   const params = useLocalSearchParams();
@@ -11,7 +56,7 @@ export default function TrackDelivery() {
   const [notFound, setNotFound] = useState(false);
   const [riderLocation, setRiderLocation] = useState<any>(null);
   const [deliveryCoords, setDeliveryCoords] = useState<any>(null);
-  const mapRef = useRef<MapView>(null);
+  const webViewRef = useRef<WebView>(null);
   const isFirstLoad = useRef(true);
   const rawIdParam =
     (Array.isArray(params.id) ? params.id[0] : params.id) ??
@@ -59,19 +104,16 @@ export default function TrackDelivery() {
           };
           setRiderLocation(coords);
 
-          // Animate map to follow rider
-          if (mapRef.current) {
-            if (isFirstLoad.current) {
-              // First load: fit both rider + destination
-              isFirstLoad.current = false;
-            } else {
-              mapRef.current.animateToRegion({
-                ...coords,
-                latitudeDelta: 0.02,
-                longitudeDelta: 0.02,
-              }, 1000);
-            }
+          if (webViewRef.current && !isFirstLoad.current) {
+            webViewRef.current.injectJavaScript(`
+              if (window.riderMarker) {
+                window.riderMarker.setLatLng([${coords.latitude}, ${coords.longitude}]);
+                map.setView([${coords.latitude}, ${coords.longitude}], map.getZoom());
+              }
+              true;
+            `);
           }
+          isFirstLoad.current = false;
         }
 
         // Parse delivery destination coords
@@ -145,47 +187,15 @@ export default function TrackDelivery() {
         </View>
       </View>
 
-      {/* Map — takes top half of screen */}
       {riderLocation ? (
-        <MapView
-          ref={mapRef}
-          provider={PROVIDER_GOOGLE}
+        <WebView
+          ref={webViewRef}
           style={styles.map}
-          initialRegion={{
-            latitude: riderLocation.latitude,
-            longitude: riderLocation.longitude,
-            latitudeDelta: 0.02,
-            longitudeDelta: 0.02,
-          }}
-        >
-          {/* Rider marker */}
-          <Marker
-            coordinate={riderLocation}
-            title="Your Rider"
-            description={`${delivery.rider_details?.first_name || ''} ${delivery.rider_details?.last_name || ''}`}
-          >
-            <View style={styles.riderMarker}>
-              <Text style={styles.riderMarkerIcon}>🏍️</Text>
-            </View>
-          </Marker>
-
-          {/* Destination marker */}
-          {deliveryCoords && (
-            <>
-              <Marker
-                coordinate={deliveryCoords}
-                title="Delivery Location"
-                pinColor="#ED1C24"
-              />
-              <Polyline
-                coordinates={[riderLocation, deliveryCoords]}
-                strokeColor="#ED1C24"
-                strokeWidth={3}
-                lineDashPattern={[6, 3]}
-              />
-            </>
-          )}
-        </MapView>
+          javaScriptEnabled
+          domStorageEnabled
+          originWhitelist={['*']}
+          source={{ html: getTrackingLeafletHTML(riderLocation, deliveryCoords, delivery) }}
+        />
       ) : (
         <View style={styles.mapPlaceholder}>
           <Text style={styles.mapPlaceholderIcon}>🗺️</Text>
