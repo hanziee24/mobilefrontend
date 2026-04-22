@@ -1,0 +1,337 @@
+import { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
+import { deliveryAPI } from '../services/api';
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
+
+export default function TrackDelivery() {
+  const params = useLocalSearchParams();
+  const [delivery, setDelivery] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
+  const [riderLocation, setRiderLocation] = useState<any>(null);
+  const [deliveryCoords, setDeliveryCoords] = useState<any>(null);
+  const mapRef = useRef<MapView>(null);
+  const isFirstLoad = useRef(true);
+  const rawIdParam =
+    (Array.isArray(params.id) ? params.id[0] : params.id) ??
+    (Array.isArray((params as any).deliveryId) ? (params as any).deliveryId[0] : (params as any).deliveryId);
+  const deliveryId = rawIdParam !== undefined && rawIdParam !== null ? Number(rawIdParam) : null;
+  const hasValidId = deliveryId !== null && Number.isFinite(deliveryId);
+
+  useEffect(() => {
+    isFirstLoad.current = true;
+    setLoading(true);
+    fetchDelivery();
+    const interval = setInterval(fetchDelivery, 4000);
+    return () => clearInterval(interval);
+  }, [rawIdParam]);
+
+  const fetchDelivery = async () => {
+    try {
+      setNotFound(false);
+      let target = null;
+      if (hasValidId) {
+        const res = await deliveryAPI.getDelivery(deliveryId as number);
+        target = res.data;
+      } else if (rawIdParam) {
+        // ID was provided but invalid
+        setNotFound(true);
+        setDelivery(null);
+        setRiderLocation(null);
+        setDeliveryCoords(null);
+        return;
+      } else {
+        const res = await deliveryAPI.getActiveDeliveries();
+        target = res.data.find((d: any) =>
+          ['PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'].includes(d.status)
+        );
+      }
+
+      if (target) {
+        setDelivery(target);
+
+        // Parse rider location
+        if (target.rider_details?.current_latitude && target.rider_details?.current_longitude) {
+          const coords = {
+            latitude: parseFloat(target.rider_details.current_latitude),
+            longitude: parseFloat(target.rider_details.current_longitude),
+          };
+          setRiderLocation(coords);
+
+          // Animate map to follow rider
+          if (mapRef.current) {
+            if (isFirstLoad.current) {
+              // First load: fit both rider + destination
+              isFirstLoad.current = false;
+            } else {
+              mapRef.current.animateToRegion({
+                ...coords,
+                latitudeDelta: 0.02,
+                longitudeDelta: 0.02,
+              }, 1000);
+            }
+          }
+        }
+
+        // Parse delivery destination coords
+        const parts = target.delivery_address?.split('|');
+        if (parts?.[1]) {
+          const [lat, lng] = parts[1].split(',').map(Number);
+          if (lat && lng) setDeliveryCoords({ latitude: lat, longitude: lng });
+        }
+      } else {
+        setDelivery(null);
+        setRiderLocation(null);
+        setDeliveryCoords(null);
+        if (rawIdParam) setNotFound(true);
+      }
+    } catch (error: any) {
+      if (rawIdParam && error?.response?.status === 404) {
+        setNotFound(true);
+        setDelivery(null);
+        setRiderLocation(null);
+        setDeliveryCoords(null);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case 'PICKED_UP': return '📦 Picked Up';
+      case 'IN_TRANSIT': return '🚚 In Transit';
+      case 'OUT_FOR_DELIVERY': return '🏠 Out for Delivery';
+      case 'DELIVERED': return '✅ Delivered';
+      default: return status;
+    }
+  };
+
+  if (loading) return (
+    <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+      <ActivityIndicator size="large" color="#ED1C24" />
+    </View>
+  );
+
+  if (!delivery) return (
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()}>
+          <Text style={styles.backButton}>←</Text>
+        </TouchableOpacity>
+        <Text style={styles.title}>Track Delivery</Text>
+        <View style={{ width: 30 }} />
+      </View>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <Text style={styles.emptyText}>
+          {notFound ? 'Delivery not found' : 'No active delivery to track'}
+        </Text>
+      </View>
+    </View>
+  );
+
+  return (
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()}>
+          <Text style={styles.backButton}>←</Text>
+        </TouchableOpacity>
+        <Text style={styles.title}>Track Delivery</Text>
+        {/* Live badge */}
+        <View style={styles.liveBadge}>
+          <View style={styles.liveDot} />
+          <Text style={styles.liveText}>LIVE</Text>
+        </View>
+      </View>
+
+      {/* Map — takes top half of screen */}
+      {riderLocation ? (
+        <MapView
+          ref={mapRef}
+          provider={PROVIDER_GOOGLE}
+          style={styles.map}
+          initialRegion={{
+            latitude: riderLocation.latitude,
+            longitude: riderLocation.longitude,
+            latitudeDelta: 0.02,
+            longitudeDelta: 0.02,
+          }}
+        >
+          {/* Rider marker */}
+          <Marker
+            coordinate={riderLocation}
+            title="Your Rider"
+            description={`${delivery.rider_details?.first_name || ''} ${delivery.rider_details?.last_name || ''}`}
+          >
+            <View style={styles.riderMarker}>
+              <Text style={styles.riderMarkerIcon}>🏍️</Text>
+            </View>
+          </Marker>
+
+          {/* Destination marker */}
+          {deliveryCoords && (
+            <>
+              <Marker
+                coordinate={deliveryCoords}
+                title="Delivery Location"
+                pinColor="#ED1C24"
+              />
+              <Polyline
+                coordinates={[riderLocation, deliveryCoords]}
+                strokeColor="#ED1C24"
+                strokeWidth={3}
+                lineDashPattern={[6, 3]}
+              />
+            </>
+          )}
+        </MapView>
+      ) : (
+        <View style={styles.mapPlaceholder}>
+          <Text style={styles.mapPlaceholderIcon}>🗺️</Text>
+          <Text style={styles.mapPlaceholderText}>Waiting for rider location...</Text>
+        </View>
+      )}
+
+      <ScrollView style={styles.content}>
+        {/* Rider info strip */}
+        {delivery.rider_details && (
+          <View style={styles.riderStrip}>
+            <View style={styles.riderAvatar}>
+              <Text style={{ fontSize: 24 }}>🏍️</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.riderName}>
+                {delivery.rider_details.first_name} {delivery.rider_details.last_name}
+              </Text>
+              <Text style={styles.riderPhone}>📞 {delivery.rider_details.phone}</Text>
+            </View>
+            <View style={styles.statusPill}>
+              <Text style={styles.statusPillText}>{getStatusText(delivery.status)}</Text>
+            </View>
+          </View>
+        )}
+
+        <View style={styles.infoCard}>
+          <Text style={styles.trackingNumber}>{delivery.tracking_number}</Text>
+
+          {delivery.estimated_time && (
+            <View style={styles.etaRow}>
+              <Text style={styles.etaIcon}>⏱</Text>
+              <Text style={styles.etaText}>ETA: {delivery.estimated_time}</Text>
+            </View>
+          )}
+
+          <View style={styles.routeInfo}>
+            <View style={styles.routeItem}>
+              <Text style={styles.routeIcon}>🟢</Text>
+              <View style={styles.routeDetails}>
+                <Text style={styles.routeLabel}>Pickup</Text>
+                <Text style={styles.routeAddress}>{delivery.pickup_address?.split('|')[0] || 'N/A'}</Text>
+              </View>
+            </View>
+            <View style={styles.routeLine} />
+            <View style={styles.routeItem}>
+              <Text style={styles.routeIcon}>🔴</Text>
+              <View style={styles.routeDetails}>
+                <Text style={styles.routeLabel}>Delivery</Text>
+                <Text style={styles.routeAddress}>{delivery.delivery_address?.split('|')[0]}</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Timeline */}
+          <View style={styles.timeline}>
+            {[
+              { label: 'Order Placed', done: true, time: new Date(delivery.created_at).toLocaleTimeString() },
+              { label: 'Picked Up', done: ['PICKED_UP','IN_TRANSIT','OUT_FOR_DELIVERY','DELIVERED'].includes(delivery.status), time: '' },
+              { label: 'In Transit', done: ['IN_TRANSIT','OUT_FOR_DELIVERY','DELIVERED'].includes(delivery.status), time: '' },
+              { label: 'Delivered', done: delivery.status === 'DELIVERED', time: '' },
+            ].map((step, i) => (
+              <View key={i} style={styles.timelineItem}>
+                <View style={[styles.timelineDot, step.done && styles.dotDone]} />
+                <View style={styles.timelineContent}>
+                  <Text style={styles.timelineText}>{step.label}</Text>
+                  {step.time ? <Text style={styles.timelineTime}>{step.time}</Text> : null}
+                </View>
+              </View>
+            ))}
+          </View>
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#f5f5f5' },
+  header: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 15, paddingTop: 50, paddingBottom: 15,
+    backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#ddd',
+  },
+  backButton: { fontSize: 28, color: '#333' },
+  title: { fontSize: 20, fontWeight: 'bold', color: '#333' },
+  liveBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    backgroundColor: '#E8F5E9', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12,
+  },
+  liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#4CAF50' },
+  liveText: { fontSize: 11, fontWeight: 'bold', color: '#4CAF50' },
+  map: { height: 300, width: '100%' },
+  mapPlaceholder: {
+    height: 300, backgroundColor: '#E3F2FD',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  mapPlaceholderIcon: { fontSize: 48, marginBottom: 8 },
+  mapPlaceholderText: { fontSize: 14, color: '#666' },
+  riderMarker: {
+    backgroundColor: '#fff', borderRadius: 20, padding: 4,
+    borderWidth: 2, borderColor: '#ED1C24',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3, shadowRadius: 4, elevation: 5,
+  },
+  riderMarkerIcon: { fontSize: 22 },
+  content: { flex: 1 },
+  riderStrip: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: '#fff', padding: 15, marginBottom: 1,
+    borderBottomWidth: 1, borderBottomColor: '#f0f0f0',
+  },
+  riderAvatar: {
+    width: 48, height: 48, borderRadius: 24,
+    backgroundColor: '#FFF0F0', justifyContent: 'center', alignItems: 'center',
+  },
+  riderName: { fontSize: 15, fontWeight: '600', color: '#333' },
+  riderPhone: { fontSize: 13, color: '#666', marginTop: 2 },
+  statusPill: {
+    backgroundColor: '#E8F5E9', paddingHorizontal: 10,
+    paddingVertical: 5, borderRadius: 12,
+  },
+  statusPillText: { fontSize: 12, color: '#2E7D32', fontWeight: '600' },
+  infoCard: {
+    backgroundColor: '#fff', borderRadius: 15, padding: 20,
+    margin: 15, marginTop: 10,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1, shadowRadius: 8, elevation: 3,
+  },
+  trackingNumber: { fontSize: 18, fontWeight: 'bold', color: '#333', marginBottom: 8 },
+  etaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 14 },
+  etaIcon: { fontSize: 16 },
+  etaText: { fontSize: 14, color: '#E65100', fontWeight: '600' },
+  routeInfo: { marginBottom: 20 },
+  routeItem: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  routeIcon: { fontSize: 18, marginTop: 2 },
+  routeDetails: { flex: 1 },
+  routeLabel: { fontSize: 11, color: '#999', marginBottom: 3 },
+  routeAddress: { fontSize: 14, color: '#333', fontWeight: '500' },
+  routeLine: { width: 2, height: 18, backgroundColor: '#ddd', marginLeft: 8, marginVertical: 3 },
+  timeline: { gap: 14 },
+  timelineItem: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  timelineDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: '#ddd', marginTop: 3 },
+  dotDone: { backgroundColor: '#4CAF50' },
+  timelineContent: { flex: 1 },
+  timelineText: { fontSize: 14, fontWeight: '600', color: '#333' },
+  timelineTime: { fontSize: 12, color: '#999', marginTop: 2 },
+  emptyText: { fontSize: 16, color: '#999' },
+});
