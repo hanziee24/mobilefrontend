@@ -10,6 +10,7 @@ export default function CashierCreateDelivery() {
   const [senderName, setSenderName] = useState('');
   const [senderContact, setSenderContact] = useState('');
   const [senderContactLinked, setSenderContactLinked] = useState<boolean | null>(null);
+  const [linkedCustomerName, setLinkedCustomerName] = useState<string | null>(null);
   const [checkingPhone, setCheckingPhone] = useState(false);
   const [senderContactError, setSenderContactError] = useState('');
   const [receiverContactError, setReceiverContactError] = useState('');
@@ -105,12 +106,14 @@ export default function CashierCreateDelivery() {
   const handleSenderContactChange = async (value: string) => {
     setSenderContact(value);
     setSenderContactLinked(null);
+    setLinkedCustomerName(null);
     setSenderContactError(validateContact(value));
     if (value.length >= 11) {
       setCheckingPhone(true);
       try {
         const res = await api.get(`/auth/check-phone/?phone=${value}`);
         setSenderContactLinked(res.data.exists);
+        setLinkedCustomerName(res.data.full_name || null);
       } catch {
         setSenderContactLinked(false);
       } finally {
@@ -386,8 +389,11 @@ export default function CashierCreateDelivery() {
         <TextInput style={[styles.input, senderContactError ? styles.inputError : null]} value={senderContact} onChangeText={handleSenderContactChange} placeholder="09XXXXXXXXX" keyboardType="phone-pad" placeholderTextColor="#999" />
         {senderContactError ? <Text style={styles.errorHint}>{senderContactError}</Text> : null}
         {checkingPhone && <Text style={styles.phoneHint}>🔍 Checking...</Text>}
-        {!checkingPhone && senderContactLinked === true && (
-          <Text style={[styles.phoneHint, { color: '#4CAF50' }]}>✅ Registered — delivery will appear in their app automatically</Text>
+        {!checkingPhone && senderContactLinked === true && linkedCustomerName && (
+          <View style={styles.nameMatchBox}>
+            <Text style={styles.nameMatchText}>✅ Registered as: <Text style={{ fontWeight: 'bold' }}>{linkedCustomerName}</Text></Text>
+            <Text style={styles.nameMatchHint}>Confirm this matches the customer in front of you before proceeding.</Text>
+          </View>
         )}
         {!checkingPhone && senderContactLinked === false && senderContact.length >= 11 && (
           <Text style={[styles.phoneHint, { color: '#FF9800' }]}>⚠️ Not registered — customer can still track using the tracking number</Text>
@@ -642,6 +648,9 @@ const styles = StyleSheet.create({
   gcashInputLabel: { fontSize: 13, fontWeight: '600', color: '#333', marginBottom: 6 },
   gcashInput: { borderWidth: 1, borderColor: '#ddd', borderRadius: 10, padding: 13, backgroundColor: '#f9f9f9', fontSize: 15 },
   phoneHint: { fontSize: 12, color: '#999', marginTop: 4, marginBottom: 4 },
+  nameMatchBox: { backgroundColor: '#E8F5E9', borderRadius: 8, padding: 10, marginTop: 4, marginBottom: 4, borderWidth: 1, borderColor: '#4CAF50' },
+  nameMatchText: { fontSize: 13, color: '#2E7D32' },
+  nameMatchHint: { fontSize: 11, color: '#4CAF50', marginTop: 2 },
   errorHint: { fontSize: 12, color: '#ED1C24', marginTop: 4, marginBottom: 4 },
   inputError: { borderColor: '#ED1C24' },
   submitBtn: { backgroundColor: '#4CAF50', padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 24 },

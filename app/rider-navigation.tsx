@@ -23,15 +23,26 @@ type AddressDetails = {
 };
 
 const parseAddressWithCoords = (rawAddress?: string): AddressDetails => {
-  const [addressPart, coordsPart] = (rawAddress || '').split('|');
-  const label = (addressPart || '').trim();
+  const parts = (rawAddress || '')
+    .split('|')
+    .map(part => part.trim())
+    .filter(Boolean);
+  const label = (parts.length > 1 ? parts.slice(0, -1).join(' | ') : parts[0] || '').trim();
+  const coordsPart = parts.length > 1 ? parts[parts.length - 1] : null;
 
   if (!coordsPart) {
     return { label, coords: null };
   }
 
   const [lat, lng] = coordsPart.split(',').map(Number);
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+  if (
+    !Number.isFinite(lat) ||
+    !Number.isFinite(lng) ||
+    lat < -90 ||
+    lat > 90 ||
+    lng < -180 ||
+    lng > 180
+  ) {
     return { label, coords: null };
   }
 
@@ -244,11 +255,20 @@ export default function RiderNavigation() {
     const deliveryJson = deliveryCoords ? JSON.stringify([deliveryCoords.latitude, deliveryCoords.longitude]) : 'null';
     const riderJson = riderLocation ? JSON.stringify([riderLocation.latitude, riderLocation.longitude]) : 'null';
     webViewRef.current.injectJavaScript(`
+      if (!window.pickupMarker && ${pickupJson}) {
+        window.pickupMarker = L.marker(${pickupJson}, { icon: pickupIcon }).addTo(map);
+      }
       if (window.pickupMarker && ${pickupJson}) {
         window.pickupMarker.setLatLng(${pickupJson});
       }
+      if (!window.deliveryMarker && ${deliveryJson}) {
+        window.deliveryMarker = L.marker(${deliveryJson}, { icon: destIcon }).addTo(map);
+      }
       if (window.deliveryMarker && ${deliveryJson}) {
         window.deliveryMarker.setLatLng(${deliveryJson});
+      }
+      if (!window.riderMarker && ${riderJson}) {
+        window.riderMarker = L.marker(${riderJson}, { icon: riderIcon }).addTo(map);
       }
       if (window.riderMarker && ${riderJson}) {
         window.riderMarker.setLatLng(${riderJson});
@@ -256,7 +276,7 @@ export default function RiderNavigation() {
       if (window.routeLine) {
         window.routeLine.setLatLngs(${routeJson});
       }
-      if (${routeJson}.length > 0) {
+      if (${routeJson}.length > 1) {
         map.fitBounds(window.routeLine.getBounds(), { padding: [40, 40] });
       }
       true;
@@ -286,6 +306,11 @@ export default function RiderNavigation() {
         pickup.coords ||
         (activeDelivery.sender_latitude && activeDelivery.sender_longitude
           ? { latitude: Number(activeDelivery.sender_latitude), longitude: Number(activeDelivery.sender_longitude) }
+          : activeDelivery.rider_details?.branch_latitude && activeDelivery.rider_details?.branch_longitude
+            ? {
+                latitude: Number(activeDelivery.rider_details.branch_latitude),
+                longitude: Number(activeDelivery.rider_details.branch_longitude),
+              }
           : await geocodeAddress(pickup.label));
 
       const dropoffResolved =
