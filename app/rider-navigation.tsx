@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Linking, Alert, ActivityIndicator, ScrollView } from 'react-native';
 import { router } from 'expo-router';
 import { deliveryAPI } from '../services/api';
@@ -17,6 +17,35 @@ import {
 
 type RoutePoint = { latitude: number; longitude: number };
 
+type AddressDetails = {
+  label: string;
+  coords: RoutePoint | null;
+};
+
+const parseAddressWithCoords = (rawAddress?: string): AddressDetails => {
+  const [addressPart, coordsPart] = (rawAddress || '').split('|');
+  const label = (addressPart || '').trim();
+
+  if (!coordsPart) {
+    return { label, coords: null };
+  }
+
+  const [lat, lng] = coordsPart.split(',').map(Number);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return { label, coords: null };
+  }
+
+  return {
+    label,
+    coords: { latitude: lat, longitude: lng },
+  };
+};
+
+const formatAddressLabel = (rawAddress?: string, fallback = 'N/A') => {
+  const details = parseAddressWithCoords(rawAddress);
+  return details.label || fallback;
+};
+
 function getLeafletHTML(
   pickupCoords: RoutePoint | null,
   deliveryCoords: RoutePoint | null,
@@ -26,23 +55,28 @@ function getLeafletHTML(
 ) {
   const center = deliveryCoords
     ? [deliveryCoords.latitude, deliveryCoords.longitude]
-    : riderLocation
-      ? [riderLocation.latitude, riderLocation.longitude]
-      : [10.3157, 123.8854];
+    : pickupCoords
+      ? [pickupCoords.latitude, pickupCoords.longitude]
+      : riderLocation
+        ? [riderLocation.latitude, riderLocation.longitude]
+        : [10.3157, 123.8854];
 
   const route = routeCoordinates.length > 1
     ? routeCoordinates
-    : riderLocation && deliveryCoords
-      ? [riderLocation, deliveryCoords]
-      : pickupCoords && deliveryCoords
-        ? [pickupCoords, deliveryCoords]
-        : [];
+    : pickupCoords && deliveryCoords
+      ? [pickupCoords, deliveryCoords]
+      : riderLocation && deliveryCoords
+        ? [riderLocation, deliveryCoords]
+        : riderLocation && pickupCoords
+          ? [riderLocation, pickupCoords]
+          : [];
 
   const routeLatLngs = JSON.stringify(route.map(p => [p.latitude, p.longitude]));
+  const pickupLatLng = pickupCoords ? JSON.stringify([pickupCoords.latitude, pickupCoords.longitude]) : 'null';
   const deliveryLatLng = deliveryCoords ? JSON.stringify([deliveryCoords.latitude, deliveryCoords.longitude]) : 'null';
   const riderLatLng = riderLocation ? JSON.stringify([riderLocation.latitude, riderLocation.longitude]) : 'null';
-  const receiverName = delivery?.receiver_name || '';
-  const deliveryAddress = delivery?.delivery_address?.split('|')[0] || '';
+  const pickupLabel = delivery?.pickup_address?.split('|')[0] || 'Pickup';
+  const deliveryLabel = delivery?.delivery_address?.split('|')[0] || 'Delivery';
 
   return `
 <!DOCTYPE html>
@@ -59,14 +93,33 @@ function getLeafletHTML(
     var map = L.map('map').setView(${JSON.stringify(center)}, 14);
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OSM' }).addTo(map);
 
-    var riderIcon = L.divIcon({ html: '<div style="font-size:28px">🏍️</div>', className: '', iconAnchor: [14,14] });
-    var destIcon = L.divIcon({ html: '<div style="font-size:28px">📦</div>', className: '', iconAnchor: [14,28] });
+    var riderIcon = L.divIcon({
+      html: '<div style="background:#fff;border:2px solid #ED1C24;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:0 2px 6px rgba(0,0,0,0.25)">R</div>',
+      className: '',
+      iconAnchor: [14, 14]
+    });
+    var pickupIcon = L.divIcon({
+      html: '<div style="background:#fff;border:2px solid #2E7D32;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:0 2px 6px rgba(0,0,0,0.25)">S</div>',
+      className: '',
+      iconAnchor: [14, 28]
+    });
+    var destIcon = L.divIcon({
+      html: '<div style="background:#fff;border:2px solid #1565C0;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:0 2px 6px rgba(0,0,0,0.25)">D</div>',
+      className: '',
+      iconAnchor: [14, 28]
+    });
 
     window.routeLine = L.polyline(${routeLatLngs}, { color: '#ED1C24', weight: 4 }).addTo(map);
 
+    if (${pickupLatLng}) {
+      window.pickupMarker = L.marker(${pickupLatLng}, { icon: pickupIcon })
+        .bindPopup('<b>Pickup</b><br>${pickupLabel}')
+        .addTo(map);
+    }
+
     if (${deliveryLatLng}) {
       window.deliveryMarker = L.marker(${deliveryLatLng}, { icon: destIcon })
-        .bindPopup('<b>${receiverName}</b><br>${deliveryAddress}')
+        .bindPopup('<b>Delivery</b><br>${deliveryLabel}')
         .addTo(map);
     }
 
@@ -87,9 +140,9 @@ function getLeafletHTML(
 export default function RiderNavigation() {
   const [delivery, setDelivery] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [riderLocation, setRiderLocation] = useState<any>(null);
-  const [pickupCoords, setPickupCoords] = useState<any>(null);
-  const [deliveryCoords, setDeliveryCoords] = useState<any>(null);
+  const [riderLocation, setRiderLocation] = useState<RoutePoint | null>(null);
+  const [pickupCoords, setPickupCoords] = useState<RoutePoint | null>(null);
+  const [deliveryCoords, setDeliveryCoords] = useState<RoutePoint | null>(null);
   const [routeCoordinates, setRouteCoordinates] = useState<RoutePoint[]>([]);
   const [isTrackingActive, setIsTrackingActive] = useState(false);
   const webViewRef = useRef<WebView>(null);
@@ -105,18 +158,18 @@ export default function RiderNavigation() {
       getCurrentLocation();
       startBackgroundTracking();
       const interval = setInterval(getCurrentLocation, 10000);
-      return () => {
-        clearInterval(interval);
-      };
+      return () => clearInterval(interval);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [delivery]);
 
   useEffect(() => {
-    if (deliveryCoords && riderLocation) {
-      fetchRoadRoute(riderLocation, deliveryCoords);
-    } else if (pickupCoords && deliveryCoords) {
+    if (pickupCoords && deliveryCoords) {
       fetchRoadRoute(pickupCoords, deliveryCoords);
+    } else if (riderLocation && deliveryCoords) {
+      fetchRoadRoute(riderLocation, deliveryCoords);
+    } else if (riderLocation && pickupCoords) {
+      fetchRoadRoute(riderLocation, pickupCoords);
     } else {
       setRouteCoordinates([]);
     }
@@ -126,26 +179,7 @@ export default function RiderNavigation() {
   useEffect(() => {
     updateLeafletMap();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [routeCoordinates, deliveryCoords]);
-
-  const parseAddressWithCoords = (rawAddress: string) => {
-    const [addressPart, coordsPart] = (rawAddress || '').split('|');
-    const address = (addressPart || '').trim();
-
-    if (!coordsPart) {
-      return { address, coords: null as { latitude: number; longitude: number } | null };
-    }
-
-    const [lat, lng] = coordsPart.split(',').map(Number);
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-      return { address, coords: null as { latitude: number; longitude: number } | null };
-    }
-
-    return {
-      address,
-      coords: { latitude: lat, longitude: lng },
-    };
-  };
+  }, [routeCoordinates, pickupCoords, deliveryCoords, riderLocation]);
 
   const geocodeAddress = async (address: string) => {
     if (!address) return null;
@@ -198,16 +232,26 @@ export default function RiderNavigation() {
     if (!webViewRef.current) return;
     const route = routeCoordinates.length > 1
       ? routeCoordinates
-      : riderLocation && deliveryCoords
-        ? [riderLocation, deliveryCoords]
-        : pickupCoords && deliveryCoords
-          ? [pickupCoords, deliveryCoords]
-          : [];
+      : pickupCoords && deliveryCoords
+        ? [pickupCoords, deliveryCoords]
+        : riderLocation && deliveryCoords
+          ? [riderLocation, deliveryCoords]
+          : riderLocation && pickupCoords
+            ? [riderLocation, pickupCoords]
+            : [];
     const routeJson = JSON.stringify(route.map(p => [p.latitude, p.longitude]));
+    const pickupJson = pickupCoords ? JSON.stringify([pickupCoords.latitude, pickupCoords.longitude]) : 'null';
     const deliveryJson = deliveryCoords ? JSON.stringify([deliveryCoords.latitude, deliveryCoords.longitude]) : 'null';
+    const riderJson = riderLocation ? JSON.stringify([riderLocation.latitude, riderLocation.longitude]) : 'null';
     webViewRef.current.injectJavaScript(`
+      if (window.pickupMarker && ${pickupJson}) {
+        window.pickupMarker.setLatLng(${pickupJson});
+      }
       if (window.deliveryMarker && ${deliveryJson}) {
         window.deliveryMarker.setLatLng(${deliveryJson});
+      }
+      if (window.riderMarker && ${riderJson}) {
+        window.riderMarker.setLatLng(${riderJson});
       }
       if (window.routeLine) {
         window.routeLine.setLatLngs(${routeJson});
@@ -222,27 +266,36 @@ export default function RiderNavigation() {
   const fetchDelivery = async () => {
     try {
       const deliveries = await deliveryAPI.getActiveDeliveries();
-      const activeDelivery = deliveries.data.find((d: any) => d.status === 'PICKED_UP' || d.status === 'IN_TRANSIT' || d.status === 'OUT_FOR_DELIVERY');
-      if (activeDelivery) {
-        setDelivery(activeDelivery);
+      const activeDelivery = deliveries.data.find((d: any) =>
+        d.status === 'PICKED_UP' || d.status === 'IN_TRANSIT' || d.status === 'OUT_FOR_DELIVERY'
+      );
 
-        const pickup = parseAddressWithCoords(activeDelivery.pickup_address);
-        const dropoff = parseAddressWithCoords(activeDelivery.delivery_address);
-
-        const pickupResolved =
-          pickup.coords ||
-          (activeDelivery.sender_latitude && activeDelivery.sender_longitude
-            ? { latitude: Number(activeDelivery.sender_latitude), longitude: Number(activeDelivery.sender_longitude) }
-            : await geocodeAddress(pickup.address));
-        const dropoffResolved =
-          dropoff.coords ||
-          (activeDelivery.delivery_latitude && activeDelivery.delivery_longitude
-            ? { latitude: Number(activeDelivery.delivery_latitude), longitude: Number(activeDelivery.delivery_longitude) }
-            : await geocodeAddress(dropoff.address));
-
-        setPickupCoords(pickupResolved);
-        setDeliveryCoords(dropoffResolved);
+      if (!activeDelivery) {
+        setDelivery(null);
+        setPickupCoords(null);
+        setDeliveryCoords(null);
+        return;
       }
+
+      setDelivery(activeDelivery);
+
+      const pickup = parseAddressWithCoords(activeDelivery.pickup_address);
+      const dropoff = parseAddressWithCoords(activeDelivery.delivery_address);
+
+      const pickupResolved =
+        pickup.coords ||
+        (activeDelivery.sender_latitude && activeDelivery.sender_longitude
+          ? { latitude: Number(activeDelivery.sender_latitude), longitude: Number(activeDelivery.sender_longitude) }
+          : await geocodeAddress(pickup.label));
+
+      const dropoffResolved =
+        dropoff.coords ||
+        (activeDelivery.delivery_latitude && activeDelivery.delivery_longitude
+          ? { latitude: Number(activeDelivery.delivery_latitude), longitude: Number(activeDelivery.delivery_longitude) }
+          : await geocodeAddress(dropoff.label));
+
+      setPickupCoords(pickupResolved);
+      setDeliveryCoords(dropoffResolved);
     } catch (_error) {
       Alert.alert('Error', 'Failed to load delivery');
     } finally {
@@ -302,10 +355,9 @@ export default function RiderNavigation() {
 
   const openMaps = () => {
     if (!delivery) return;
-    const address = delivery.delivery_address.split('|')[0];
     const destination = deliveryCoords
       ? `${deliveryCoords.latitude},${deliveryCoords.longitude}`
-      : address;
+      : formatAddressLabel(delivery.delivery_address);
     const url = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}`;
     Linking.openURL(url);
   };
@@ -368,7 +420,11 @@ export default function RiderNavigation() {
           </View>
           <View style={styles.infoRow}>
             <MapPinned size={16} color="#666" strokeWidth={2.2} />
-            <Text style={styles.address}>{delivery.delivery_address.split('|')[0]}</Text>
+            <Text style={styles.address}>Pickup: {formatAddressLabel(delivery.pickup_address)}</Text>
+          </View>
+          <View style={styles.infoRow}>
+            <MapPinned size={16} color="#666" strokeWidth={2.2} />
+            <Text style={styles.address}>Delivery: {formatAddressLabel(delivery.delivery_address)}</Text>
           </View>
           {delivery.receiver_phone && (
             <View style={styles.infoRow}>
@@ -497,14 +553,6 @@ const styles = StyleSheet.create({
     height: 300,
     width: '100%',
   },
-  mapPlaceholder: {
-    height: 300,
-    backgroundColor: '#E3F2FD',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 10,
-  },
-  mapText: { fontSize: 18, fontWeight: '600', color: '#333' },
   content: { flex: 1 },
   contentContainer: { padding: 15, paddingBottom: 30 },
   infoCard: {

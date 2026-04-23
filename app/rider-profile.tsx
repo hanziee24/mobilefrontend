@@ -216,11 +216,6 @@ export default function RiderProfile() {
             <Text style={styles.menuText}>Earnings History</Text>
             <ChevronRight size={20} color="#bbb" strokeWidth={2.2} />
           </TouchableOpacity>
-          <TouchableOpacity style={styles.menuItem}>
-            <Bike size={20} color="#333" strokeWidth={2.2} />
-            <Text style={styles.menuText}>Vehicle Details</Text>
-            <ChevronRight size={20} color="#bbb" strokeWidth={2.2} />
-          </TouchableOpacity>
           <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/notifications')}>
             <Bell size={20} color="#333" strokeWidth={2.2} />
             <Text style={styles.menuText}>Notifications</Text>

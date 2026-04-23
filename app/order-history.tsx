@@ -13,10 +13,8 @@ interface Delivery {
   updated_at: string;
   has_rating: boolean;
   sender_name: string;
-  sender_address: string;
   sender_contact: string;
   receiver_name: string;
-  receiver_address: string;
   receiver_contact: string;
   package_details: string;
   pickup_address: string;
@@ -139,7 +137,7 @@ export default function OrderHistory() {
                       </View>
                       <View style={styles.detailRow}>
                         <Text style={styles.detailLabel}>Address:</Text>
-                        <Text style={styles.detailValue}>{order.sender_address}</Text>
+                        <Text style={styles.detailValue}>{order.pickup_address?.split('|')[0].trim()}</Text>
                       </View>
                     </View>
 
@@ -156,7 +154,7 @@ export default function OrderHistory() {
                       </View>
                       <View style={styles.detailRow}>
                         <Text style={styles.detailLabel}>Address:</Text>
-                        <Text style={styles.detailValue}>{order.receiver_address}</Text>
+                        <Text style={styles.detailValue}>{order.delivery_address?.split('|')[0].trim()}</Text>
                       </View>
                     </View>
 

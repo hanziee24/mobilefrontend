@@ -24,20 +24,11 @@ export default function CashierCreateDelivery() {
   const [isFragile, setIsFragile] = useState(false);
   const [specialInstructions, setSpecialInstructions] = useState('');
   const [deliveryFee, setDeliveryFee] = useState('');
-  type PaymentMethod = 'CASH' | 'GCASH' | 'MAYA' | 'BANK_TRANSFER' | 'CREDIT_CARD';
-  const DIGITAL_METHODS: PaymentMethod[] = ['GCASH', 'MAYA', 'BANK_TRANSFER', 'CREDIT_CARD'];
+  type PaymentMethod = 'CASH' | 'GCASH';
+  const DIGITAL_METHODS: PaymentMethod[] = ['GCASH'];
   const PAYMENT_LABELS: Record<PaymentMethod, string> = {
     CASH: '💵 Cash',
     GCASH: '📱 GCash',
-    MAYA: '💜 Maya',
-    BANK_TRANSFER: '🏦 Bank Transfer',
-    CREDIT_CARD: '💳 Credit/Debit Card',
-  };
-  const DIGITAL_HINTS: Record<string, string> = {
-    GCASH: 'Ask customer to scan your GCash QR',
-    MAYA: 'Ask customer to send Maya payment',
-    BANK_TRANSFER: 'Ask customer to transfer via bank',
-    CREDIT_CARD: 'Process credit/debit card payment',
   };
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('CASH');
   const [amountTendered, setAmountTendered] = useState('');
@@ -501,7 +492,7 @@ export default function CashierCreateDelivery() {
 
         <Text style={styles.label}>Payment Method</Text>
         <View style={styles.methodGrid}>
-          {(['CASH', 'GCASH', 'MAYA', 'BANK_TRANSFER', 'CREDIT_CARD'] as const).map(m => (
+          {(['CASH', 'GCASH'] as const).map(m => (
             <TouchableOpacity
               key={m}
               style={[styles.methodBtn, paymentMethod === m && styles.methodBtnActive]}
@@ -526,9 +517,7 @@ export default function CashierCreateDelivery() {
                 <Text style={styles.digitalHintWarn}>⚠️ No GCash QR uploaded. Please update your profile.</Text>
               )
             )}
-            {paymentMethod !== 'GCASH' && (
-              <Text style={styles.digitalHint}>💡 {DIGITAL_HINTS[paymentMethod]}</Text>
-            )}
+
             <View style={styles.gcashInputGroup}>
               <Text style={styles.gcashInputLabel}>Amount Received (₱) *</Text>
               <TextInput
