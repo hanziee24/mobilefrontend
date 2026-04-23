@@ -7,7 +7,7 @@ import { LanguageProvider } from '../contexts/LanguageContext';
 import { authAPI } from '../services/api';
 
 export const unstable_settings = {
-  anchor: '(tabs)',
+  initialRouteName: 'auth',
 };
 
 const ROLE_HOME: Record<string, string> = {
