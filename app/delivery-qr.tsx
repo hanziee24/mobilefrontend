@@ -5,6 +5,7 @@ import { deliveryAPI } from '../services/api';
 import QRCode from 'react-native-qrcode-svg';
 import * as Sharing from 'expo-sharing';
 import { File, Paths } from 'expo-file-system';
+import { Share2, BarChart2, Smartphone, ScanLine, MapPin } from 'lucide-react-native';
 
 export default function DeliveryQRCode() {
   const params = useLocalSearchParams();
@@ -114,28 +115,35 @@ export default function DeliveryQRCode() {
         </View>
 
         <TouchableOpacity style={styles.shareButton} onPress={shareQRCode}>
-          <Text style={styles.shareText}>📤 Share QR Code</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity 
-          style={styles.printButton} 
-          onPress={() => router.push({ pathname: '/printable-qr-label', params: { id: delivery.id } } as any)}
-        >
-          <Text style={styles.printText}>🖨️ Print Label</Text>
+          <Share2 color="#fff" size={18} style={{ marginRight: 8 }} />
+          <Text style={styles.shareText}>Share QR Code</Text>
         </TouchableOpacity>
 
         <TouchableOpacity 
           style={styles.historyButton} 
           onPress={() => router.push('/qr-scan-history' as any)}
         >
-          <Text style={styles.historyText}>📊 View Scan History</Text>
+          <BarChart2 color="#fff" size={18} style={{ marginRight: 8 }} />
+          <Text style={styles.historyText}>View Scan History</Text>
         </TouchableOpacity>
 
         <View style={styles.instructionCard}>
-          <Text style={styles.instructionTitle}>📱 How to use:</Text>
-          <Text style={styles.instructionText}>• Rider scans QR to pick up package</Text>
-          <Text style={styles.instructionText}>• Customer can scan to track delivery</Text>
-          <Text style={styles.instructionText}>• Share QR code with sender/receiver</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
+            <Smartphone color="#1976D2" size={16} style={{ marginRight: 6 }} />
+            <Text style={styles.instructionTitle}>How to use:</Text>
+          </View>
+          <View style={styles.instructionRow}>
+            <ScanLine color="#1976D2" size={14} style={{ marginRight: 8, marginTop: 1 }} />
+            <Text style={styles.instructionText}>Rider scans QR to pick up the package</Text>
+          </View>
+          <View style={styles.instructionRow}>
+            <MapPin color="#1976D2" size={14} style={{ marginRight: 8, marginTop: 1 }} />
+            <Text style={styles.instructionText}>Customer scans to track delivery status</Text>
+          </View>
+          <View style={styles.instructionRow}>
+            <Share2 color="#1976D2" size={14} style={{ marginRight: 8, marginTop: 1 }} />
+            <Text style={styles.instructionText}>Share QR code with sender or receiver</Text>
+          </View>
         </View>
       </ScrollView>
     </View>
@@ -216,22 +224,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#4CAF50',
     padding: 16,
     borderRadius: 12,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 10,
   },
   shareText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  printButton: {
-    backgroundColor: '#ED1C24',
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  printText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
@@ -240,7 +238,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#2196F3',
     padding: 16,
     borderRadius: 12,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 15,
   },
   historyText: {
@@ -259,7 +259,11 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: 'bold',
     color: '#1976D2',
-    marginBottom: 10,
+  },
+  instructionRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 8,
   },
   instructionText: {
     fontSize: 13,

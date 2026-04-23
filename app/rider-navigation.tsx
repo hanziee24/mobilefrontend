@@ -87,7 +87,7 @@ function getLeafletHTML(
   const deliveryLatLng = deliveryCoords ? JSON.stringify([deliveryCoords.latitude, deliveryCoords.longitude]) : 'null';
   const riderLatLng = riderLocation ? JSON.stringify([riderLocation.latitude, riderLocation.longitude]) : 'null';
   const pickupLabel = delivery?.pickup_address?.split('|')[0] || 'Pickup';
-  const deliveryLabel = delivery?.delivery_address?.split('|')[0] || 'Delivery';
+  const receiverAddressLabel = delivery?.delivery_address?.split('|')[0] || 'Receiver Address';
 
   return `
 <!DOCTYPE html>
@@ -130,7 +130,7 @@ function getLeafletHTML(
 
     if (${deliveryLatLng}) {
       window.deliveryMarker = L.marker(${deliveryLatLng}, { icon: destIcon })
-        .bindPopup('<b>Delivery</b><br>${deliveryLabel}')
+        .bindPopup('<b>Receiver Address</b><br>${receiverAddressLabel}')
         .addTo(map);
     }
 
@@ -449,7 +449,7 @@ export default function RiderNavigation() {
           </View>
           <View style={styles.infoRow}>
             <MapPinned size={16} color="#666" strokeWidth={2.2} />
-            <Text style={styles.address}>Delivery: {formatAddressLabel(delivery.delivery_address)}</Text>
+            <Text style={styles.address}>Receiver Address: {formatAddressLabel(delivery.delivery_address)}</Text>
           </View>
           {delivery.receiver_phone && (
             <View style={styles.infoRow}>

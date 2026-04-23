@@ -138,14 +138,19 @@ export default function RiderPOS() {
         <TouchableOpacity
           style={[styles.uploadBtn, gcashProof && styles.uploadBtnDone]}
           onPress={async () => {
-            const result = await ImagePicker.launchImageLibraryAsync({
+            const permission = await ImagePicker.requestCameraPermissionsAsync();
+            if (!permission.granted) {
+              Alert.alert('Permission required', 'Camera access is needed to capture the GCash receipt.');
+              return;
+            }
+            const result = await ImagePicker.launchCameraAsync({
               mediaTypes: ImagePicker.MediaTypeOptions.Images,
               quality: 0.7,
             });
             if (!result.canceled) setGcashProof(result.assets[0].uri);
           }}
         >
-          <Text style={styles.uploadBtnText}>{gcashProof ? '✓ Screenshot Selected' : '📷 Upload GCash Screenshot'}</Text>
+          <Text style={styles.uploadBtnText}>{gcashProof ? '✓ Photo Captured' : '📷 Capture GCash Receipt'}</Text>
         </TouchableOpacity>
 
         {gcashProof && (

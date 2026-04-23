@@ -3,13 +3,13 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, ActivityIn
 import { router } from 'expo-router';
 import { Bell, ChevronRight, Handshake, History, LogOut, Menu, PackageCheck, PackageSearch, User, Wallet } from 'lucide-react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { authAPI, deliveryAPI } from '../services/api';
+import { authAPI, deliveryAPI, notificationAPI } from '../services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const MENU_ITEMS = [
   { icon: PackageCheck, label: 'Accept Parcel', sub: 'Drop-off  Collect fee  Waybill', route: '/cashier-create-delivery', highlight: true },
   { icon: History, label: 'Parcel History', sub: 'View accepted parcels & waybills', route: '/cashier-parcel-history', highlight: false },
-  { icon: Bell, label: 'Notifications', sub: 'View system alerts', route: '/notifications', highlight: false },
+  { icon: Bell, label: 'Notifications', sub: 'View system alerts', route: '/notifications', highlight: false, badge: true },
 ];
 
 export default function CashierDashboard() {
@@ -18,16 +18,19 @@ export default function CashierDashboard() {
   const [loading, setLoading] = useState(true);
   const [menuVisible, setMenuVisible] = useState(false);
   const [pendingRequests, setPendingRequests] = useState<any[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   const fetchData = useCallback(async () => {
     try {
-      const [profileRes, deliveriesRes, requestsRes] = await Promise.all([
+      const [profileRes, deliveriesRes, requestsRes, countRes] = await Promise.all([
         authAPI.getProfile(),
         deliveryAPI.getAllDeliveries(),
         deliveryAPI.getDeliveryRequests(),
+        notificationAPI.getUnreadCount(),
       ]);
       setUser(profileRes.data);
       setPendingRequests(requestsRes.data);
+      setUnreadCount(countRes.data.count);
       const today = new Date().toDateString();
       const todayDeliveries = deliveriesRes.data.filter((d: any) => new Date(d.created_at).toDateString() === today);
       setTodayStats({
@@ -212,7 +215,13 @@ export default function CashierDashboard() {
                   <Text style={[styles.actionTitle, item.highlight && { color: '#fff' }]}>{item.label}</Text>
                   <Text style={[styles.actionSub, item.highlight && { color: 'rgba(255,255,255,0.75)' }]}>{item.sub}</Text>
                 </View>
-                <ChevronRight size={20} color={item.highlight ? 'rgba(255,255,255,0.6)' : '#ccc'} strokeWidth={2.2} />
+                {item.badge && unreadCount > 0 ? (
+                  <View style={styles.menuBadge}>
+                    <Text style={styles.menuBadgeText}>{unreadCount}</Text>
+                  </View>
+                ) : (
+                  <ChevronRight size={20} color={item.highlight ? 'rgba(255,255,255,0.6)' : '#ccc'} strokeWidth={2.2} />
+                )}
               </TouchableOpacity>
             );
           })}
@@ -266,6 +275,8 @@ const styles = StyleSheet.create({
   actionSub: { fontSize: 12, color: '#999' },
   noRequestsBanner: { backgroundColor: '#f9f9f9', borderRadius: 12, padding: 14, alignItems: 'center', borderWidth: 1, borderColor: '#eee' },
   noRequestsText: { fontSize: 13, color: '#bbb', fontWeight: '500' },
+  menuBadge: { backgroundColor: '#ED1C24', borderRadius: 10, minWidth: 22, height: 22, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 5 },
+  menuBadgeText: { color: '#fff', fontSize: 12, fontWeight: 'bold' },
   requestCard: { backgroundColor: '#fff', borderRadius: 14, padding: 14, marginBottom: 10, borderLeftWidth: 4, borderLeftColor: '#ED1C24', elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 6, flexDirection: 'row', alignItems: 'center', gap: 10 },
   requestInfo: { flex: 1 },
   requestName: { fontSize: 14, fontWeight: '700', color: '#1a1a1a', marginBottom: 2 },

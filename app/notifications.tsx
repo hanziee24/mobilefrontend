@@ -118,7 +118,16 @@ export default function Notifications() {
           </View>
         ) : (
           notifications.map((notif) => (
-            <TouchableOpacity key={notif.id} style={[styles.notifCard, !notif.is_read && styles.unread]}>
+            <TouchableOpacity
+              key={notif.id}
+              style={[styles.notifCard, !notif.is_read && styles.unread]}
+              onPress={async () => {
+                if (!notif.is_read) {
+                  setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, is_read: true } : n));
+                  notificationAPI.markRead(notif.id).catch(() => {});
+                }
+              }}
+            >
               <View style={styles.notifIcon}>
                 <Text style={styles.iconText}>🔔</Text>
               </View>

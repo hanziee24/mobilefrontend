@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { View, TouchableOpacity, StyleSheet, ScrollView, Text, Alert, ActivityIndicator } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { deliveryAPI, authAPI } from '../services/api';
+import { deliveryAPI, authAPI, notificationAPI } from '../services/api';
 import { useLanguage } from '../contexts/LanguageContext';
 import LanguageSelector from '../components/LanguageSelector';
 import {
   ArrowRight,
+  Bell,
   Bike,
   CheckCircle2,
   CircleDot,
@@ -40,6 +41,7 @@ export default function RiderDashboard() {
   const [stats, setStats] = useState({ completed: 0, rating: 0, todayEarnings: 0, todayCount: 0, activeCount: 0, weekEarnings: 0 });
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [loading, setLoading] = useState(true);
+  const [unreadCount, setUnreadCount] = useState(0);
   const isSettingStatus = useRef(false);
 
   const fetchDeliveries = async () => {
@@ -51,6 +53,13 @@ export default function RiderDashboard() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchUnreadCount = async () => {
+    try {
+      const res = await notificationAPI.getUnreadCount();
+      setUnreadCount(res.data.count);
+    } catch {}
   };
 
   const fetchStats = async () => {
@@ -86,11 +95,13 @@ export default function RiderDashboard() {
   useEffect(() => {
     fetchDeliveries();
     fetchStats();
+    fetchUnreadCount();
     setRiderStatus(true);
 
     const interval = setInterval(() => {
       fetchDeliveries();
       fetchStats();
+      fetchUnreadCount();
     }, 15000);
 
     return () => {
@@ -146,6 +157,14 @@ export default function RiderDashboard() {
         </View>
         <View style={styles.headerRight}>
           <LanguageSelector />
+          <TouchableOpacity style={styles.bellBtn} onPress={() => router.push('/notifications')}>
+            <Bell size={22} color="#333" strokeWidth={2.2} />
+            {unreadCount > 0 && (
+              <View style={styles.notifBadge}>
+                <Text style={styles.badgeText}>{unreadCount}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
           <TouchableOpacity style={[styles.statusButton, !isOnline && styles.offlineButton]} onPress={handleToggleAvailability}>
             <CircleDot size={13} color={isOnline ? '#4CAF50' : '#D32F2F'} strokeWidth={2.4} />
             <Text style={[styles.statusText, !isOnline && styles.offlineText]}>{isOnline ? t('dashboard.online') : t('dashboard.offline')}</Text>
@@ -331,6 +350,9 @@ const styles = StyleSheet.create({
   headerTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   headerTitle: { fontSize: 20, fontWeight: 'bold', color: '#333' },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  bellBtn: { position: 'relative', padding: 4 },
+  notifBadge: { position: 'absolute', top: 0, right: 0, backgroundColor: '#ED1C24', borderRadius: 8, minWidth: 16, height: 16, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 3 },
+  badgeText: { color: '#fff', fontSize: 10, fontWeight: 'bold' },
   statusButton: { backgroundColor: '#E8F5E9', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, flexDirection: 'row', alignItems: 'center', gap: 5 },
   offlineButton: { backgroundColor: '#FFEBEE' },
   statusText: { fontSize: 13, fontWeight: '600', color: '#4CAF50' },

@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react';
 import { View, TouchableOpacity, StyleSheet, ScrollView, Text, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { deliveryAPI, authAPI } from '../services/api';
-import { Box, ChartColumn, ChevronRight, Home, LayoutDashboard, LifeBuoy, PackageCheck, ShieldUser, UserRound, Users } from 'lucide-react-native';
+import { deliveryAPI, authAPI, notificationAPI } from '../services/api';
+import { Bell, Box, ChartColumn, ChevronRight, Home, LayoutDashboard, LifeBuoy, PackageCheck, ShieldUser, UserRound, Users } from 'lucide-react-native';
 
 export default function AdminDashboard() {
   const insets = useSafeAreaInsets();
@@ -19,6 +19,7 @@ export default function AdminDashboard() {
     completedDeliveries: 0,
   });
   const [loading, setLoading] = useState(true);
+  const [unreadCount, setUnreadCount] = useState(0);
   const navSafeInset = Math.max(insets.bottom, 0);
   const navHeightCompensation = 72 + navSafeInset;
 
@@ -30,16 +31,18 @@ export default function AdminDashboard() {
 
   const fetchDashboardData = async () => {
     try {
-      const [deliveriesRes, ridersRes, customersRes] = await Promise.all([
+      const [deliveriesRes, ridersRes, customersRes, countRes] = await Promise.all([
         deliveryAPI.getAllDeliveries(),
         deliveryAPI.getAllRiders().catch(() => ({ data: [] })),
         authAPI.getCustomers().catch(() => ({ data: [] })),
+        notificationAPI.getUnreadCount().catch(() => ({ data: { count: 0 } })),
       ]);
 
       const deliveries = deliveriesRes.data;
       const riders = ridersRes.data || [];
       const customers = customersRes.data || [];
 
+      setUnreadCount(countRes.data.count);
       setStats({
         totalRiders: riders.length,
         activeRiders: riders.filter((r: any) => r.is_approved).length,
@@ -60,11 +63,21 @@ export default function AdminDashboard() {
   return (
     <View style={styles.wrapper}>
       <View style={styles.header}>
-        <View style={styles.headerTitleRow}>
-          <ShieldUser size={20} color="#fff" strokeWidth={2.2} />
-          <Text style={styles.headerTitle}>Admin Control Panel</Text>
+        <View>
+          <View style={styles.headerTitleRow}>
+            <ShieldUser size={20} color="#fff" strokeWidth={2.2} />
+            <Text style={styles.headerTitle}>Admin Control Panel</Text>
+          </View>
+          <Text style={styles.headerSubtitle}>System Overview and Management</Text>
         </View>
-        <Text style={styles.headerSubtitle}>System Overview and Management</Text>
+        <TouchableOpacity style={styles.bellBtn} onPress={() => router.push('/notifications')}>
+          <Bell size={24} color="#fff" strokeWidth={2.2} />
+          {unreadCount > 0 && (
+            <View style={styles.notifBadge}>
+              <Text style={styles.badgeText}>{unreadCount}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
       </View>
 
       <ScrollView style={[styles.container, { marginBottom: navHeightCompensation }]}>
@@ -226,10 +239,13 @@ export default function AdminDashboard() {
 
 const styles = StyleSheet.create({
   wrapper: { flex: 1, backgroundColor: '#f5f5f5' },
-  header: { paddingHorizontal: 15, paddingTop: 50, paddingBottom: 15, backgroundColor: '#1a1a1a', borderBottomWidth: 3, borderBottomColor: '#ED1C24' },
+  header: { paddingHorizontal: 15, paddingTop: 50, paddingBottom: 15, backgroundColor: '#1a1a1a', borderBottomWidth: 3, borderBottomColor: '#ED1C24', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   headerTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
   headerTitle: { fontSize: 22, fontWeight: 'bold', color: '#fff' },
   headerSubtitle: { fontSize: 12, color: '#ccc' },
+  bellBtn: { position: 'relative', padding: 4 },
+  notifBadge: { position: 'absolute', top: 0, right: 0, backgroundColor: '#ED1C24', borderRadius: 8, minWidth: 16, height: 16, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 3 },
+  badgeText: { color: '#fff', fontSize: 10, fontWeight: 'bold' },
   container: { flex: 1 },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 50 },
   loadingText: { marginTop: 15, fontSize: 16, color: '#666' },
