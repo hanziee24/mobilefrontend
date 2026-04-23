@@ -3,22 +3,15 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, ActivityIn
 import { router } from 'expo-router';
 import { authAPI } from '../services/api';
 import MapPicker from '../components/MapPicker';
-import axios from 'axios';
-
-let MapView: any, Marker: any, Callout: any;
-if (Platform.OS !== 'web') {
-  const Maps = require('react-native-maps');
-  MapView = Maps.default;
-  Marker = Maps.Marker;
-  Callout = Maps.Callout;
-}
+import { isAxiosError } from 'axios';
+import MapView, { Marker, Callout } from 'react-native-maps';
 
 type Branch = { id: number; name: string; address: string; latitude?: number; longitude?: number; is_active: boolean };
 
 const to6dp = (value: number) => Number(value.toFixed(6));
 
 const getAxiosErrorMessage = (error: any) => {
-  if (!axios.isAxiosError(error)) return null;
+  if (!isAxiosError(error)) return null;
   const data = error.response?.data;
   if (!data) return null;
   if (typeof data === 'string') return data;
@@ -60,7 +53,7 @@ export default function AdminBranches() {
       const res = await authAPI.getBranches();
       setBranches(res.data);
     } catch (error) {
-      if (axios.isAxiosError(error) && (error.response?.status === 401 || error.response?.status === 403)) {
+      if (isAxiosError(error) && (error.response?.status === 401 || error.response?.status === 403)) {
         Alert.alert('Session Required', 'Only admin accounts can manage hubs. Please sign in as admin and try again.');
       } else {
         Alert.alert('Error', 'Failed to load branches');
@@ -107,7 +100,7 @@ export default function AdminBranches() {
       setShowForm(false);
       fetchBranches();
     } catch (error) {
-      if (axios.isAxiosError(error)) {
+      if (isAxiosError(error)) {
         const serverMessage = getAxiosErrorMessage(error);
 
         if (error.response?.status === 401 || error.response?.status === 403) {
@@ -169,7 +162,7 @@ export default function AdminBranches() {
           {branches.length === 0 ? (
             <View style={styles.emptyState}>
               <Text style={styles.emptyIcon}>🏢</Text>
-              <Text style={styles.emptyText}>No hubs yet. Tap "+ Add" to create one.</Text>
+              <Text style={styles.emptyText}>No hubs yet. Tap &quot;+ Add&quot; to create one.</Text>
             </View>
           ) : branches.map(b => (
             <View key={b.id} style={styles.card}>

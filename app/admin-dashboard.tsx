@@ -1,9 +1,9 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { View, TouchableOpacity, StyleSheet, ScrollView, Text, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { deliveryAPI, authAPI } from '../services/api';
-import { Bell, Box, ChartColumn, ChevronRight, ClipboardList, Home, LayoutDashboard, LifeBuoy, PackageCheck, ShieldUser, UserRound, Users } from 'lucide-react-native';
+import { Box, ChartColumn, ChevronRight, Home, LayoutDashboard, LifeBuoy, PackageCheck, ShieldUser, UserRound, Users } from 'lucide-react-native';
 
 export default function AdminDashboard() {
   const insets = useSafeAreaInsets();

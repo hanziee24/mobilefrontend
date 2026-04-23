@@ -1,8 +1,8 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ArrowLeft, Bell, Boxes, ChartColumn, ChevronRight, House, LogOut, Mail, Phone, Settings, ShieldUser, Users, UserRound } from 'lucide-react-native';
+import { ArrowLeft, Bell, Boxes, ChartColumn, ChevronRight, House, LogOut, Mail, Phone, Settings, ShieldUser, Users } from 'lucide-react-native';
 import { authAPI, deliveryAPI, analyticsAPI } from '../services/api';
 
 export default function AdminProfile() {
@@ -29,7 +29,7 @@ export default function AdminProfile() {
         totalUsers: dashboardUsers?.total ?? 0,
         pendingApprovals: deliveriesRes.data.filter((d: any) => !d.is_approved).length,
       });
-    } catch (error) {
+    } catch {
       // Silent fail
     } finally {
       setLoading(false);

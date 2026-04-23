@@ -2,9 +2,6 @@ import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Modal, TextInput } from 'react-native';
 import { router } from 'expo-router';
 import { authAPI } from '../services/api';
-import { API_URL } from '../services/api';
-
-const MEDIA_BASE = API_URL.replace('/api', '');
 
 export default function AdminUsers() {
   const [customers, setCustomers] = useState<any[]>([]);

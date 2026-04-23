@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, Share, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Alert, ScrollView } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { deliveryAPI } from '../services/api';
 import QRCode from 'react-native-qrcode-svg';
-import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
+import { File, Paths } from 'expo-file-system';
 
 export default function DeliveryQRCode() {
   const params = useLocalSearchParams();
@@ -14,7 +14,8 @@ export default function DeliveryQRCode() {
 
   useEffect(() => {
     fetchDelivery();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); 
 
   const fetchDelivery = async () => {
     try {
@@ -23,7 +24,7 @@ export default function DeliveryQRCode() {
         const response = await deliveryAPI.getDelivery(Number(deliveryId));
         setDelivery(response.data);
       }
-    } catch (error) {
+    } catch {
       Alert.alert('Error', 'Failed to load delivery');
     } finally {
       setLoading(false);
@@ -33,17 +34,15 @@ export default function DeliveryQRCode() {
   const shareQRCode = async () => {
     try {
       qrRef.toDataURL(async (data: string) => {
-        const fileUri = FileSystem.documentDirectory + `${delivery.tracking_number}.png`;
-        await FileSystem.writeAsStringAsync(fileUri, data, {
-          encoding: FileSystem.EncodingType.Base64,
-        });
+        const file = new File(Paths.document, `${delivery.tracking_number}.png`);
+        file.write(data, { encoding: 'base64' });
         
-        await Sharing.shareAsync(fileUri, {
+        await Sharing.shareAsync(file.uri, {
           mimeType: 'image/png',
           dialogTitle: `Share QR Code - ${delivery.tracking_number}`,
         });
       });
-    } catch (error) {
+    } catch {
       Alert.alert('Error', 'Failed to share QR code');
     }
   };

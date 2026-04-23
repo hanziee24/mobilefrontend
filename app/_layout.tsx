@@ -55,7 +55,7 @@ export default function RootLayout() {
     };
 
     checkRouteAccess();
-  }, [segments]);
+  }, [segments, router]);
 
   useEffect(() => {
     // Listen for app state changes globally

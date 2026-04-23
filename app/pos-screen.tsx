@@ -43,7 +43,10 @@ export default function POSScreen() {
     } catch {}
   };
 
-  useEffect(() => { loadProducts(); }, [selectedCategory, search]);
+  useEffect(() => {
+    loadProducts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCategory, search]);
 
   const openScanner = async () => {
     const { status } = await Camera.requestCameraPermissionsAsync();

@@ -97,6 +97,7 @@ export default function RiderNavigation() {
   useEffect(() => {
     fetchDelivery();
     checkTrackingStatus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -108,6 +109,7 @@ export default function RiderNavigation() {
         clearInterval(interval);
       };
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [delivery]);
 
   useEffect(() => {
@@ -118,10 +120,12 @@ export default function RiderNavigation() {
     } else {
       setRouteCoordinates([]);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [riderLocation, pickupCoords, deliveryCoords]);
 
   useEffect(() => {
     updateLeafletMap();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [routeCoordinates, deliveryCoords]);
 
   const parseAddressWithCoords = (rawAddress: string) => {
@@ -239,7 +243,7 @@ export default function RiderNavigation() {
         setPickupCoords(pickupResolved);
         setDeliveryCoords(dropoffResolved);
       }
-    } catch (error) {
+    } catch (_error) {
       Alert.alert('Error', 'Failed to load delivery');
     } finally {
       setLoading(false);
@@ -265,7 +269,7 @@ export default function RiderNavigation() {
       await locationService.stopTracking();
       setIsTrackingActive(false);
       Alert.alert('Success', 'Background tracking stopped');
-    } catch (error) {
+    } catch (_error) {
       Alert.alert('Error', 'Failed to stop tracking');
     }
   };

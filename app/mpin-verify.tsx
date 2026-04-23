@@ -119,7 +119,7 @@ export default function MpinVerify() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Reset MPIN</Text>
-            <Text style={styles.modalSub}>Enter your registered email and we'll send you a new MPIN.</Text>
+            <Text style={styles.modalSub}>Enter your registered email and we&apos;ll send you a new MPIN.</Text>
             <TextInput
               style={styles.modalInput}
               placeholder="Your email address"

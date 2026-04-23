@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { ratingAPI } from '../services/api';
@@ -9,12 +9,12 @@ interface RiderStats {
   avg_rating: number;
   total_ratings: number;
   low_ratings_count: number;
-  recent_ratings: Array<{
+  recent_ratings: {
     rating: number;
     comment: string;
     created_at: string;
     tracking_number: string;
-  }>;
+  }[];
 }
 
 export default function AdminLowRatedRiders() {
@@ -43,21 +43,22 @@ export default function AdminLowRatedRiders() {
       `Are you sure you want to ${action} this rider?`,
       [
         { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Confirm', 
+        {
+          text: 'Confirm',
           onPress: () => {
             Alert.alert('Success', `Rider ${action} successfully`);
-          }
-        }
+          },
+        },
       ]
     );
   };
 
-  const renderStars = (rating: number) => {
-    return Array(5).fill(0).map((_, i) => (
-      <Text key={i} style={styles.starIcon}>{i < Math.round(rating) ? '⭐' : '☆'}</Text>
+  const renderStars = (rating: number) =>
+    Array.from({ length: 5 }, (_, i) => (
+      <Text key={i} style={styles.starIcon}>
+        {i < Math.round(rating) ? '⭐' : '☆'}
+      </Text>
     ));
-  };
 
   if (loading) {
     return (
@@ -88,7 +89,7 @@ export default function AdminLowRatedRiders() {
       <ScrollView style={styles.content}>
         {riders.map((rider) => (
           <View key={rider.rider_id} style={styles.riderCard}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.riderHeader}
               onPress={() => setExpandedRider(expandedRider === rider.rider_id ? null : rider.rider_id)}
             >
@@ -112,25 +113,21 @@ export default function AdminLowRatedRiders() {
                   <View key={idx} style={styles.reviewItem}>
                     <View style={styles.reviewHeader}>
                       <View style={styles.stars}>{renderStars(rating.rating)}</View>
-                      <Text style={styles.reviewDate}>
-                        {new Date(rating.created_at).toLocaleDateString()}
-                      </Text>
+                      <Text style={styles.reviewDate}>{new Date(rating.created_at).toLocaleDateString()}</Text>
                     </View>
                     <Text style={styles.reviewOrder}>Order: {rating.tracking_number}</Text>
-                    {rating.comment && (
-                      <Text style={styles.reviewComment}>"{rating.comment}"</Text>
-                    )}
+                    {rating.comment && <Text style={styles.reviewComment}>&quot;{rating.comment}&quot;</Text>}
                   </View>
                 ))}
 
                 <View style={styles.actionButtons}>
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     style={[styles.actionBtn, styles.warnBtn]}
                     onPress={() => handleAction(rider.rider_id, 'send warning to')}
                   >
                     <Text style={styles.actionBtnText}>⚠️ Send Warning</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     style={[styles.actionBtn, styles.suspendBtn]}
                     onPress={() => handleAction(rider.rider_id, 'suspend')}
                   >
@@ -194,19 +191,10 @@ const styles = StyleSheet.create({
     elevation: 2,
     overflow: 'hidden',
   },
-  riderHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 15,
-  },
+  riderHeader: { flexDirection: 'row', alignItems: 'center', padding: 15 },
   riderInfo: { flex: 1 },
   riderName: { fontSize: 16, fontWeight: 'bold', color: '#333', marginBottom: 6 },
-  ratingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 4,
-  },
+  ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
   stars: { flexDirection: 'row', gap: 2 },
   starIcon: { fontSize: 14 },
   avgRating: { fontSize: 14, fontWeight: 'bold', color: '#ED1C24' },
@@ -218,54 +206,19 @@ const styles = StyleSheet.create({
     padding: 15,
     backgroundColor: '#fafafa',
   },
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 10,
-  },
-  reviewItem: {
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
-  },
-  reviewHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
+  sectionTitle: { fontSize: 14, fontWeight: 'bold', color: '#333', marginBottom: 12 },
+  reviewItem: { marginBottom: 12, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#eee' },
+  reviewHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
   reviewDate: { fontSize: 11, color: '#999' },
-  reviewOrder: { fontSize: 11, color: '#666', marginBottom: 6 },
-  reviewComment: {
-    fontSize: 12,
-    color: '#333',
-    fontStyle: 'italic',
-    marginTop: 6,
-    paddingTop: 6,
-    borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
-  },
-  actionButtons: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 15,
-  },
-  actionBtn: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  warnBtn: { backgroundColor: '#FFC107' },
+  reviewOrder: { fontSize: 12, color: '#666', marginBottom: 4 },
+  reviewComment: { fontSize: 12, color: '#444', fontStyle: 'italic' },
+  actionButtons: { flexDirection: 'row', gap: 10, marginTop: 12 },
+  actionBtn: { flex: 1, paddingVertical: 12, borderRadius: 8, alignItems: 'center' },
+  warnBtn: { backgroundColor: '#FF9800' },
   suspendBtn: { backgroundColor: '#DC3545' },
-  actionBtnText: { fontSize: 13, fontWeight: 'bold', color: '#fff' },
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: 80,
-  },
-  emptyIcon: { fontSize: 64, marginBottom: 15 },
-  emptyText: { fontSize: 18, fontWeight: '600', color: '#333', marginBottom: 8 },
-  emptySubtext: { fontSize: 14, color: '#999' },
+  actionBtnText: { color: '#fff', fontWeight: 'bold' },
+  emptyState: { alignItems: 'center', paddingVertical: 40 },
+  emptyIcon: { fontSize: 40, marginBottom: 10 },
+  emptyText: { fontSize: 16, fontWeight: 'bold', color: '#333', marginBottom: 6 },
+  emptySubtext: { fontSize: 12, color: '#777' },
 });

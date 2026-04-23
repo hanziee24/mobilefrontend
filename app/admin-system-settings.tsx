@@ -20,7 +20,7 @@ export default function AdminSystemSettings() {
       setBaseFee(parseFloat(res.data.base_fee).toString());
       setPerKgRate(parseFloat(res.data.per_kg_rate).toString());
       setPerItemRate(parseFloat(res.data.per_item_rate).toString());
-    } catch (error) {
+    } catch {
       Alert.alert('Error', 'Failed to load fee configuration');
     } finally {
       setLoading(false);
@@ -62,7 +62,7 @@ export default function AdminSystemSettings() {
         per_item_rate: parseFloat(perItemRate),
       });
       Alert.alert('✅ Saved', 'Delivery fee configuration updated successfully.');
-    } catch (error) {
+    } catch {
       Alert.alert('Error', 'Failed to save configuration');
     } finally {
       setSaving(false);

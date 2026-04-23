@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Alert, Modal, Image, Share } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Alert, Image, Share } from 'react-native';
 import { router } from 'expo-router';
 import { deliveryAPI, settingsAPI } from '../services/api';
 import api from '../services/api';
@@ -102,7 +102,8 @@ export default function CashierCreateDelivery() {
         setDeliveryFee(fee.toString());
       }
     }
-  }, [weight, quantity]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weight, quantity, weightUnit, feeConfig.base_fee, feeConfig.per_kg_rate, feeConfig.per_item_rate]);
 
   const validateContact = (value: string): string => {
     if (!value) return '';

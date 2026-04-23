@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Image, Modal, Alert } from 'react-native';
 import { router } from 'expo-router';
-import { deliveryAPI } from '../services/api';
-import { API_URL } from '../services/api';
+import { deliveryAPI, API_URL } from '../services/api';
 
 interface Delivery {
   id: number;

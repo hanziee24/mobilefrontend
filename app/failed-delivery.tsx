@@ -33,7 +33,7 @@ export default function FailedDelivery() {
       if (activeDelivery) {
         setDelivery(activeDelivery);
       }
-    } catch (error) {
+    } catch (_error) {
       Alert.alert('Error', 'Failed to load delivery');
     } finally {
       setLoading(false);

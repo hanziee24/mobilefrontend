@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { View, TouchableOpacity, StyleSheet, ScrollView, Text, Alert, ActivityIndicator } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { deliveryAPI, authAPI } from '../services/api';
@@ -19,12 +19,6 @@ import {
   Truck,
   UserRound,
 } from 'lucide-react-native';
-
-interface RiderDetails {
-  first_name: string;
-  last_name: string;
-  phone: string;
-}
 
 interface Delivery {
   id: number;
@@ -161,7 +155,7 @@ export default function RiderDashboard() {
 
       <ScrollView style={styles.container}>
         <View style={styles.earningsCard}>
-          <Text style={styles.earningsTitle}>Today's Earnings</Text>
+          <Text style={styles.earningsTitle}>Today&apos;s Earnings</Text>
           <Text style={styles.earningsAmount}>PHP {stats.todayEarnings.toFixed(2)}</Text>
           <View style={styles.earningsStats}>
             <View style={styles.statItem}>
@@ -202,7 +196,7 @@ export default function RiderDashboard() {
           ) : deliveries.length === 0 ? (
             <View style={styles.emptyState}>
               <Text style={styles.emptyText}>No active deliveries</Text>
-              <Text style={styles.emptySubtext}>You'll see new deliveries here when assigned</Text>
+              <Text style={styles.emptySubtext}>You&apos;ll see new deliveries here when assigned</Text>
             </View>
           ) : (
             deliveries.map((delivery) => (

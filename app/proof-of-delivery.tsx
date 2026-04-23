@@ -16,6 +16,7 @@ export default function ProofOfDelivery() {
 
   useEffect(() => {
     fetchDelivery();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   const fetchDelivery = async () => {
@@ -30,7 +31,7 @@ export default function ProofOfDelivery() {
         );
         if (activeDelivery) setDelivery(activeDelivery);
       }
-    } catch (error) {
+    } catch (_error) {
       Alert.alert('Error', 'Failed to load delivery');
     } finally {
       setLoading(false);

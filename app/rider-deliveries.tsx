@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { View, TouchableOpacity, StyleSheet, ScrollView, Text, Alert, ActivityIndicator } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { deliveryAPI } from '../services/api';
@@ -111,7 +111,7 @@ export default function RiderDeliveries() {
           ) : deliveries.length === 0 ? (
             <View style={styles.emptyState}>
               <Text style={styles.emptyText}>No active deliveries</Text>
-              <Text style={styles.emptySubtext}>You'll see new deliveries here when assigned</Text>
+              <Text style={styles.emptySubtext}>You&apos;ll see new deliveries here when assigned</Text>
             </View>
           ) : (
             deliveries.map((delivery) => (

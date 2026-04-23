@@ -70,6 +70,7 @@ export default function TrackDelivery() {
     fetchDelivery();
     const interval = setInterval(fetchDelivery, 4000);
     return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rawIdParam]);
 
   const fetchDelivery = async () => {

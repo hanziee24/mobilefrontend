@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, Linking, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { authAPI } from '../services/api';
-import { ArrowLeft, MapPin, Phone } from 'lucide-react-native';
+import { ArrowLeft, MapPin } from 'lucide-react-native';
 
 interface Branch {
   id: number;

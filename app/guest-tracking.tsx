@@ -48,6 +48,7 @@ export default function GuestTracking() {
 
   useEffect(() => {
     if (tracking?.trim()) handleTrack(tracking.trim());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const openScanner = async () => {
@@ -129,7 +130,7 @@ export default function GuestTracking() {
       {!result ? (
         <View style={styles.centeredArea}>
           <View style={styles.heroCopy}>
-            <Text style={styles.heroTitle}>Where's your parcel?</Text>
+            <Text style={styles.heroTitle}>Where&apos;s your parcel?</Text>
             <Text style={styles.heroSubtitle}>Check status in seconds with your tracking number.</Text>
           </View>
           {trackingCard}

@@ -15,7 +15,10 @@ export default function SalesReport() {
   const [loading, setLoading] = useState(true);
   const [actionSaleId, setActionSaleId] = useState<number | null>(null);
 
-  useEffect(() => { loadReport(); }, [period]);
+  useEffect(() => {
+    loadReport();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [period]);
 
   const loadReport = async () => {
     setLoading(true);

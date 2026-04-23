@@ -1,8 +1,8 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, ActivityIndicator, TextInput, Modal } from 'react-native';
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ArrowLeft, Bell, Bike, ChevronRight, CircleUserRound, DollarSign, Gauge, HelpCircle, KeyRound, LogOut, MapPin, Phone, Star, UserRound } from 'lucide-react-native';
+import { ArrowLeft, Bell, Bike, ChevronRight, DollarSign, Gauge, HelpCircle, KeyRound, LogOut, MapPin, Phone, Star, UserRound } from 'lucide-react-native';
 import { authAPI, deliveryAPI, supportAPI } from '../services/api';
 
 export default function RiderProfile() {
@@ -45,8 +45,8 @@ export default function RiderProfile() {
       });
       setSupportName(`${profileRes.data.first_name || ''} ${profileRes.data.last_name || ''}`.trim());
       setSupportEmail(profileRes.data.email || '');
-    } catch (error) {
-      console.log('Profile fetch error:', error);
+    } catch (_error) {
+      console.log('Profile fetch error:', _error);
     } finally {
       setLoading(false);
     }

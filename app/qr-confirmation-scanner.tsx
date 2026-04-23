@@ -19,7 +19,7 @@ export default function DeliveryConfirmationScanner() {
     try {
       const response = await authAPI.getProfile();
       setIsOnline(response.data.is_online || false);
-    } catch (error) {
+    } catch (_error) {
       console.log('Failed to check rider status');
     }
   };
@@ -64,7 +64,7 @@ export default function DeliveryConfirmationScanner() {
       } else {
         handleDeliveryScan(delivery);
       }
-    } catch (error) {
+    } catch (_error) {
       Alert.alert('Error', 'Failed to scan QR code', [
         { text: 'OK', onPress: () => setScanned(false) }
       ]);
@@ -103,7 +103,7 @@ export default function DeliveryConfirmationScanner() {
               Alert.alert('Success', 'Package picked up successfully!', [
                 { text: 'OK', onPress: () => router.back() }
               ]);
-            } catch (error) {
+            } catch (_error) {
               Alert.alert('Error', 'Failed to update status');
               setScanned(false);
             }

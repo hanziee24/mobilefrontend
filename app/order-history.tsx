@@ -1,8 +1,7 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Image, Modal } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { deliveryAPI } from '../services/api';
-import { API_URL } from '../services/api';
+import { deliveryAPI, API_URL } from '../services/api';
 import { ArrowLeft, ChevronDown, ChevronRight, House, Package, Package2, UserRound } from 'lucide-react-native';
 
 interface Delivery {

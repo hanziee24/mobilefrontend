@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Modal, Image, TextInput, PanResponder } from 'react-native';
 import { router } from 'expo-router';
 import { authAPI, deliveryAPI } from '../services/api';

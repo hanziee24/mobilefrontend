@@ -2,8 +2,7 @@ import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Image, ScrollView } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { deliveryAPI, paymentAPI, authAPI } from '../services/api';
-import { API_URL } from '../services/api';
+import { deliveryAPI, paymentAPI, authAPI, API_URL } from '../services/api';
 
 export default function RiderPOS() {
   const { id, next } = useLocalSearchParams<{ id: string; next?: string }>();

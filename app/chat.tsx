@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, FlatList, Platform, ActivityIndicator, Keyboard, KeyboardEvent } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, FlatList, ActivityIndicator, Keyboard, KeyboardEvent } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { chatAPI, authAPI } from '../services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -37,6 +37,7 @@ export default function Chat() {
       setKbHeight(0);
     });
     return () => { clearInterval(interval); kbShow.remove(); kbHide.remove(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadMyId = async () => {

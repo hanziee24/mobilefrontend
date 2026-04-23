@@ -25,10 +25,10 @@ export default function MapPicker({ visible, onClose, onSelectLocation, initialA
   const [showResults, setShowResults] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
-  const [mapReady, setMapReady] = useState(false);
 
   useEffect(() => {
     if (visible) getCurrentLocation();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
   const getCurrentLocation = async () => {
@@ -146,9 +146,10 @@ export default function MapPicker({ visible, onClose, onSelectLocation, initialA
 
   const onWebViewMessage = (event: any) => {
     try {
-      const { lat, lng } = JSON.parse(event.nativeEvent.data);
-      setMarkerPosition({ latitude: lat, longitude: lng });
-      reverseGeocode(lat, lng);
+      const data = JSON.parse(event.nativeEvent.data);
+      if (data.lat == null || data.lng == null) return;
+      setMarkerPosition({ latitude: data.lat, longitude: data.lng });
+      reverseGeocode(data.lat, data.lng);
     } catch {}
   };
 
@@ -252,7 +253,6 @@ export default function MapPicker({ visible, onClose, onSelectLocation, initialA
                 source={{ html: leafletHTML }}
                 onMessage={onWebViewMessage}
                 onLoad={() => {
-                  setMapReady(true);
                   getCurrentLocation();
                 }}
                 javaScriptEnabled
@@ -266,7 +266,7 @@ export default function MapPicker({ visible, onClose, onSelectLocation, initialA
                   {selectedAddress || 'Tap on map to select location'}
                 </Text>
                 <Text style={styles.coordinatesText}>
-                  📍 GPS: {markerPosition.latitude.toFixed(6)}, {markerPosition.longitude.toFixed(6)}
+                  📍 GPS: {markerPosition.latitude?.toFixed(6)}, {markerPosition.longitude?.toFixed(6)}
                 </Text>
               </View>
 

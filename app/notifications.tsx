@@ -47,7 +47,7 @@ export default function Notifications() {
               await notificationAPI.markAllRead();
               fetchNotifications();
               Alert.alert('Success', 'All notifications marked as read');
-            } catch (error) {
+            } catch (_error) {
               Alert.alert('Error', 'Failed to mark notifications as read');
             }
           }
@@ -70,7 +70,7 @@ export default function Notifications() {
               await notificationAPI.clearAll();
               fetchNotifications();
               Alert.alert('Success', 'All notifications cleared');
-            } catch (error) {
+            } catch (_error) {
               Alert.alert('Error', 'Failed to clear notifications');
             }
           }
@@ -114,7 +114,7 @@ export default function Notifications() {
           <View style={styles.emptyState}>
             <Text style={styles.emptyIcon}>🔕</Text>
             <Text style={styles.emptyText}>No notifications</Text>
-            <Text style={styles.emptySubtext}>You're all caught up!</Text>
+            <Text style={styles.emptySubtext}>You&apos;re all caught up!</Text>
           </View>
         ) : (
           notifications.map((notif) => (

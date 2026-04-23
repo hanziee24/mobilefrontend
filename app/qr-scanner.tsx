@@ -37,7 +37,7 @@ export default function QRScanner() {
                   await deliveryAPI.updateStatus(delivery.id, 'PICKED_UP');
                   Alert.alert('Success', 'Package picked up!');
                   router.back();
-                } catch (error) {
+                } catch (_error) {
                   Alert.alert('Error', 'Failed to update status');
                   setScanned(false);
                 }
@@ -50,7 +50,7 @@ export default function QRScanner() {
           { text: 'OK', onPress: () => setScanned(false) }
         ]);
       }
-    } catch (error) {
+    } catch (_error) {
       Alert.alert('Error', 'Failed to scan QR code', [
         { text: 'OK', onPress: () => setScanned(false) }
       ]);

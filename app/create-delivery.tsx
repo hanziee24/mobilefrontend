@@ -296,7 +296,7 @@ export default function CreateDelivery() {
           <Text style={{ fontSize: 17 }}>💳</Text>
           <Text style={styles.sectionTitle}>Preferred Payment Method</Text>
         </View>
-        <Text style={{ fontSize: 12, color: '#888', marginBottom: 10 }}>Let the cashier know how you'd like to pay when you arrive.</Text>
+        <Text style={{ fontSize: 12, color: '#888', marginBottom: 10 }}>Let the cashier know how you&apos;d like to pay when you arrive.</Text>
         <View style={styles.paymentGrid}>
           {([
             { key: 'CASH', label: '💵 Cash' },

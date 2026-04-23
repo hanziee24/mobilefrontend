@@ -11,6 +11,8 @@ Notifications.setNotificationHandler({
     shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
   }),
 });
 
@@ -69,8 +71,8 @@ export const notificationService = {
     const responseListener = Notifications.addNotificationResponseReceivedListener(onNotificationTapped);
 
     return () => {
-      Notifications.removeNotificationSubscription(receivedListener);
-      Notifications.removeNotificationSubscription(responseListener);
+      receivedListener.remove();
+      responseListener.remove();
     };
   },
 

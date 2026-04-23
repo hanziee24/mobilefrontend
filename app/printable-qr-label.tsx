@@ -5,7 +5,6 @@ import { deliveryAPI } from '../services/api';
 import QRCode from 'react-native-qrcode-svg';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
-import { captureRef } from 'react-native-view-shot';
 
 export default function PrintableQRLabel() {
   const params = useLocalSearchParams();
@@ -16,6 +15,7 @@ export default function PrintableQRLabel() {
 
   useEffect(() => {
     fetchDelivery();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchDelivery = async () => {
@@ -25,7 +25,7 @@ export default function PrintableQRLabel() {
         const response = await deliveryAPI.getDelivery(Number(deliveryId));
         setDelivery(response.data);
       }
-    } catch (error) {
+    } catch (_error) {
       Alert.alert('Error', 'Failed to load delivery');
     } finally {
       setLoading(false);
@@ -164,7 +164,7 @@ export default function PrintableQRLabel() {
         height: 432, // 6 inches at 72 DPI
       });
       Alert.alert('Success', 'Label sent to printer');
-    } catch (error) {
+    } catch (_error) {
       Alert.alert('Error', 'Failed to print label');
     } finally {
       setPrinting(false);
@@ -186,7 +186,7 @@ export default function PrintableQRLabel() {
         dialogTitle: `Delivery Label - ${delivery.tracking_number}`,
         UTI: 'com.adobe.pdf',
       });
-    } catch (error) {
+    } catch (_error) {
       Alert.alert('Error', 'Failed to save PDF');
     } finally {
       setPrinting(false);
@@ -279,7 +279,7 @@ export default function PrintableQRLabel() {
 
         <View style={styles.instructionCard}>
           <Text style={styles.instructionTitle}>📋 Label Information</Text>
-          <Text style={styles.instructionText}>• Standard size: 4" x 6" (10cm x 15cm)</Text>
+          <Text style={styles.instructionText}>• Standard size: 4&quot; x 6&quot; (10cm x 15cm)</Text>
           <Text style={styles.instructionText}>• Attach to package before pickup</Text>
           <Text style={styles.instructionText}>• QR code is scannable for tracking</Text>
           <Text style={styles.instructionText}>• Keep label visible and undamaged</Text>
