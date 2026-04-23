@@ -7,7 +7,7 @@ import { LanguageProvider } from '../contexts/LanguageContext';
 import { authAPI } from '../services/api';
 
 export const unstable_settings = {
-  initialRouteName: 'auth',
+  initialRouteName: 'index',
 };
 
 const ROLE_HOME: Record<string, string> = {
@@ -37,13 +37,19 @@ export default function RootLayout() {
 
       // No token — send to auth unless already there
       if (!token || !userType) {
-        if (currentRoute && currentRoute !== 'auth' && currentRoute !== '(tabs)' && currentRoute !== 'guest-tracking') {
+        if (
+          currentRoute &&
+          currentRoute !== 'index' &&
+          currentRoute !== 'auth' &&
+          currentRoute !== '(tabs)' &&
+          currentRoute !== 'guest-tracking'
+        ) {
           router.replace('/auth');
         }
         return;
       }
 
-      if (!currentRoute || currentRoute === '(tabs)') return;
+      if (!currentRoute || currentRoute === 'index' || currentRoute === '(tabs)') return;
 
       const allowed = ROLE_ALLOWED_PREFIXES[userType] ?? [];
       const isAllowed = allowed.some((prefix) => currentRoute.startsWith(prefix));
