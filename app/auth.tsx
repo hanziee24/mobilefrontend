@@ -57,6 +57,15 @@ export default function AuthScreen() {
   const [photoLeft, setPhotoLeft] = useState<{ uri: string; name: string; type: string } | null>(null);
   const [photoRight, setPhotoRight] = useState<{ uri: string; name: string; type: string } | null>(null);
 
+  // Forgot password
+  const [forgotStep, setForgotStep] = useState<0 | 1 | 2 | 3>(0); // 0=closed, 1=email, 2=verify, 3=new password
+  const [fpEmail, setFpEmail] = useState('');
+  const [fpCode, setFpCode] = useState('');
+  const [fpNewPassword, setFpNewPassword] = useState('');
+  const [fpShowPassword, setFpShowPassword] = useState(false);
+  const [fpLoading, setFpLoading] = useState(false);
+  const fpOtpRef = useRef<TextInput>(null);
+
   const roleOptions = [
     { key: 'CUSTOMER', label: 'Customer', subLabel: 'Book and track deliveries', Icon: CircleUserRound },
     { key: 'RIDER', label: 'Rider', subLabel: 'Pickup and deliver parcels', Icon: Bike },
@@ -352,6 +361,61 @@ export default function AuthScreen() {
     }
   };
 
+  const handleForgotRequest = async () => {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fpEmail.trim())) {
+      Alert.alert('Error', 'Enter a valid email address');
+      return;
+    }
+    setFpLoading(true);
+    try {
+      await authAPI.forgotPasswordRequest(fpEmail.trim());
+      setFpStep(2);
+    } catch (error: any) {
+      Alert.alert('Error', error.response?.data?.error || error.message || 'Failed to send code');
+    } finally {
+      setFpLoading(false);
+    }
+  };
+
+  const setFpStep = (step: 0 | 1 | 2 | 3) => {
+    setForgotStep(step);
+    if (step === 2) requestAnimationFrame(() => fpOtpRef.current?.focus());
+  };
+
+  const handleForgotVerify = async () => {
+    if (fpCode.length !== 6) {
+      Alert.alert('Error', 'Enter the 6-digit code');
+      return;
+    }
+    setFpLoading(true);
+    try {
+      await authAPI.forgotPasswordVerify(fpEmail.trim(), fpCode);
+      setFpStep(3);
+    } catch (error: any) {
+      Alert.alert('Error', error.response?.data?.error || error.message || 'Invalid code');
+    } finally {
+      setFpLoading(false);
+    }
+  };
+
+  const handleForgotReset = async () => {
+    const pwErr = validatePassword(fpNewPassword);
+    if (pwErr) { Alert.alert('Error', pwErr); return; }
+    setFpLoading(true);
+    try {
+      await authAPI.forgotPasswordReset(fpEmail.trim(), fpCode, fpNewPassword);
+      Alert.alert('Success', 'Password reset successfully. You can now sign in.');
+      setFpStep(0);
+      setFpEmail('');
+      setFpCode('');
+      setFpNewPassword('');
+    } catch (error: any) {
+      Alert.alert('Error', error.response?.data?.error || error.message || 'Reset failed');
+    } finally {
+      setFpLoading(false);
+    }
+  };
+
   const handleResendCode = async () => {
     if (!verificationEmail) {
       Alert.alert('Error', 'No email address found');
@@ -407,6 +471,120 @@ export default function AuthScreen() {
       </LinearGradient>
 
       <ScrollView style={styles.bottomCard} showsVerticalScrollIndicator={false} contentContainerStyle={styles.bottomContent}>
+        {/* Forgot Password Modal */}
+        <Modal visible={forgotStep > 0} transparent animationType="fade" onRequestClose={() => setFpStep(0)}>
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalCard}>
+              {/* Step indicators */}
+              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 18 }}>
+                {[1, 2, 3].map((s) => (
+                  <View key={s} style={[
+                    { flex: 1, height: 4, borderRadius: 2, backgroundColor: forgotStep >= s ? '#ED1C24' : '#e0e0e0' }
+                  ]} />
+                ))}
+              </View>
+
+              {forgotStep === 1 && (
+                <>
+                  <Ionicons name="lock-open-outline" size={46} color="#ED1C24" style={styles.modalIcon} />
+                  <Text style={styles.modalTitle}>Forgot Password</Text>
+                  <Text style={styles.modalSubtitle}>Enter your registered email and we'll send a verification code.</Text>
+                  <View style={[styles.inputWrap, { width: '100%', marginBottom: 18 }]}>
+                    <Ionicons name="mail-outline" size={18} color="#888" style={styles.inputIcon} />
+                    <TextInput
+                      style={styles.inputWithIcon}
+                      placeholder="email@example.com"
+                      value={fpEmail}
+                      onChangeText={setFpEmail}
+                      autoCapitalize="none"
+                      keyboardType="email-address"
+                      placeholderTextColor="#999"
+                    />
+                  </View>
+                  <TouchableOpacity style={[styles.modalBtn, fpLoading && styles.disabledBtn]} onPress={handleForgotRequest} disabled={fpLoading}>
+                    {fpLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.modalBtnText}>Send Code</Text>}
+                  </TouchableOpacity>
+                </>
+              )}
+
+              {forgotStep === 2 && (
+                <>
+                  <Ionicons name="mail-open-outline" size={46} color="#ED1C24" style={styles.modalIcon} />
+                  <Text style={styles.modalTitle}>Verify Code</Text>
+                  <Text style={styles.modalSubtitle}>We sent a 6-digit code to{`\n`}<Text style={styles.modalEmail}>{fpEmail}</Text></Text>
+                  <TouchableOpacity style={styles.otpTouchLayer} activeOpacity={1} onPress={() => fpOtpRef.current?.focus()}>
+                    <View style={styles.otpRow}>
+                      {Array.from({ length: 6 }).map((_, idx) => {
+                        const char = fpCode[idx] || '';
+                        const active = fpCode.length === idx;
+                        return (
+                          <View key={idx} style={[styles.otpCell, (char || active) && styles.otpCellActive]}>
+                            <Text style={styles.otpCellText}>{char}</Text>
+                          </View>
+                        );
+                      })}
+                    </View>
+                    <TextInput
+                      ref={fpOtpRef}
+                      style={styles.otpHiddenInput}
+                      value={fpCode}
+                      onChangeText={(v) => setFpCode(v.replace(/\D/g, '').slice(0, 6))}
+                      keyboardType="number-pad"
+                      maxLength={6}
+                      autoFocus
+                      caretHidden
+                      showSoftInputOnFocus
+                      contextMenuHidden
+                      autoComplete="one-time-code"
+                      textContentType="oneTimeCode"
+                    />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.modalBtn, fpLoading && styles.disabledBtn]} onPress={handleForgotVerify} disabled={fpLoading}>
+                    {fpLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.modalBtnText}>Verify Code</Text>}
+                  </TouchableOpacity>
+                </>
+              )}
+
+              {forgotStep === 3 && (
+                <>
+                  <Ionicons name="shield-checkmark-outline" size={46} color="#ED1C24" style={styles.modalIcon} />
+                  <Text style={styles.modalTitle}>New Password</Text>
+                  <Text style={styles.modalSubtitle}>Create a strong new password for your account.</Text>
+                  <View style={[styles.passwordRow, { width: '100%', marginBottom: 14 }]}>
+                    <Ionicons name="lock-closed-outline" size={18} color="#888" style={styles.inputIcon} />
+                    <TextInput
+                      style={styles.passwordInput}
+                      placeholder="New password"
+                      value={fpNewPassword}
+                      onChangeText={setFpNewPassword}
+                      secureTextEntry={!fpShowPassword}
+                      placeholderTextColor="#999"
+                    />
+                    <TouchableOpacity onPress={() => setFpShowPassword(!fpShowPassword)} style={styles.eyeBtn}>
+                      <Ionicons name={fpShowPassword ? 'eye-outline' : 'eye-off-outline'} size={20} color="#888" />
+                    </TouchableOpacity>
+                  </View>
+                  <View style={[styles.hintsList, { width: '100%', marginBottom: 18 }]}>
+                    {PASSWORD_RULES.map((rule) => (
+                      <View key={rule.label} style={styles.hintRow}>
+                        <Ionicons name={rule.test(fpNewPassword) ? 'checkmark-circle' : 'ellipse-outline'} size={16} color={rule.test(fpNewPassword) ? '#2e7d32' : '#b0b0b0'} />
+                        <Text style={[styles.hintText, rule.test(fpNewPassword) && styles.hintTextOk]}>{rule.label}</Text>
+                      </View>
+                    ))}
+                  </View>
+                  <TouchableOpacity style={[styles.modalBtn, fpLoading && styles.disabledBtn]} onPress={handleForgotReset} disabled={fpLoading}>
+                    {fpLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.modalBtnText}>Reset Password</Text>}
+                  </TouchableOpacity>
+                </>
+              )}
+
+              <TouchableOpacity onPress={() => setFpStep(0)} style={styles.modalCancelBtn}>
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+
         <Modal visible={isVerifying} transparent animationType="fade" onShow={focusOtpInput} onRequestClose={() => setIsVerifying(false)}>
           <View style={styles.modalOverlay}>
             <View style={styles.modalCard}>
@@ -651,6 +829,12 @@ export default function AuthScreen() {
               <Ionicons name={showPassword ? 'eye-outline' : 'eye-off-outline'} size={20} color="#888" />
             </TouchableOpacity>
           </View>
+
+          {isLogin && (
+            <TouchableOpacity onPress={() => { setFpEmail(''); setFpCode(''); setFpNewPassword(''); setForgotStep(1); }} style={{ alignSelf: 'flex-end', marginTop: 6, marginBottom: 2 }}>
+              <Text style={{ color: '#ED1C24', fontSize: 13, fontWeight: '600' }}>Forgot Password?</Text>
+            </TouchableOpacity>
+          )}
 
           {!isLogin && (
             <>

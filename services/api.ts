@@ -16,6 +16,9 @@ api.interceptors.request.use(
       '/auth/verify-email/',
       '/auth/resend-verification/',
       '/auth/reset-mpin/',
+      '/auth/forgot-password/',
+      '/auth/forgot-password/verify/',
+      '/auth/forgot-password/reset/',
     ];
     const requestUrl = config.url || '';
     const isPublicAuthRequest = publicAuthPaths.some((path) => requestUrl.includes(path));
@@ -212,6 +215,9 @@ export const authAPI = {
   updateBranch: (id: number, data: { name?: string; address?: string; latitude?: number; longitude?: number }) => api.patch(`/auth/branches/${id}/`, data),
   deleteBranch: (id: number) => api.delete(`/auth/branches/${id}/`),
   resetMpin: (email: string) => api.post('/auth/reset-mpin/', { email }),
+  forgotPasswordRequest: (email: string) => api.post('/auth/forgot-password/', { email }),
+  forgotPasswordVerify: (email: string, code: string) => api.post('/auth/forgot-password/verify/', { email, code }),
+  forgotPasswordReset: (email: string, code: string, new_password: string) => api.post('/auth/forgot-password/reset/', { email, code, new_password }),
 };
 
 export const deliveryAPI = {
