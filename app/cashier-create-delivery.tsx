@@ -48,6 +48,7 @@ export default function CashierCreateDelivery() {
   const [feeOverrideEnabled, setFeeOverrideEnabled] = useState(false);
   const [feeOverrideReason, setFeeOverrideReason] = useState('');
   const [cashierBranch, setCashierBranch] = useState<{ name: string; address: string } | null>(null);
+  const [nearestHub, setNearestHub] = useState<{ name: string; address: string; distance_km: number } | null>(null);
 
   useEffect(() => {
     api.get('/auth/profile/').then(res => {
@@ -112,12 +113,16 @@ export default function CashierCreateDelivery() {
     setSenderContactLinked(null);
     setLinkedCustomerName(null);
     setSenderContactError(validateContact(value));
+    setNearestHub(null);
     if (value.length >= 11) {
       setCheckingPhone(true);
       try {
         const res = await api.get(`/auth/check-phone/?phone=${value}`);
         setSenderContactLinked(res.data.exists);
         setLinkedCustomerName(res.data.full_name || null);
+        if (res.data.exists && res.data.address) {
+          setSenderAddress(res.data.address);
+        }
       } catch {
         setSenderContactLinked(false);
       } finally {
@@ -419,7 +424,7 @@ export default function CashierCreateDelivery() {
         {!checkingPhone && senderContactLinked === true && linkedCustomerName && (
           <View style={styles.nameMatchBox}>
             <Text style={styles.nameMatchText}>✅ Registered as: <Text style={{ fontWeight: 'bold' }}>{linkedCustomerName}</Text></Text>
-            <Text style={styles.nameMatchHint}>Confirm this matches the customer in front of you before proceeding.</Text>
+            <Text style={styles.nameMatchHint}>Address pre-filled from registration. Confirm with customer, then pin on map to get nearest hub.</Text>
           </View>
         )}
         {!checkingPhone && senderContactLinked === false && senderContact.length >= 11 && (
@@ -432,6 +437,14 @@ export default function CashierCreateDelivery() {
             {senderAddress.split('|')[0] || senderAddress || 'Tap to pick sender location on map'}
           </Text>
         </TouchableOpacity>
+        {nearestHub && (
+          <View style={styles.nearestHubBox}>
+            <Text style={styles.nearestHubTitle}>🏢 Nearest Hub to Sender</Text>
+            <Text style={styles.nearestHubName}>{nearestHub.name}</Text>
+            <Text style={styles.nearestHubAddr}>{nearestHub.address}</Text>
+            <Text style={styles.nearestHubDist}>{nearestHub.distance_km} km from sender</Text>
+          </View>
+        )}
 
         {/* Receiver */}
         <Text style={styles.sectionTitle}>📥 Receiver Information</Text>
@@ -606,6 +619,9 @@ export default function CashierCreateDelivery() {
               setSenderAddress(`${address}|${lat},${lng}`);
               setSenderLat(lat);
               setSenderLng(lng);
+              authAPI.getNearestHub(lat, lng).then(res => {
+                if (res.data.length > 0) setNearestHub(res.data[0]);
+              }).catch(() => {});
             } else {
               setReceiverAddress(`${address}|${lat},${lng}`);
               setReceiverLat(lat);
