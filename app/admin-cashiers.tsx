@@ -108,6 +108,7 @@ export default function AdminCashiers() {
         onClose={() => setSelected(null)}
         onApprove={selected && !selected.is_approved ? () => handleApprove(selected) : undefined}
         onReject={selected && !selected.is_approved ? (reason) => handleReject(selected, reason) : undefined}
+        onBranchAssigned={() => { setSelected(null); fetchCashiers(); }}
       />
     </View>
   );
@@ -125,6 +126,7 @@ function CashierCard({ cashier, onApprove, onView }: { cashier: any; onApprove: 
           <Text style={styles.cardDetail}>@{cashier.username}</Text>
           {cashier.phone && <Text style={styles.cardDetail}>📞 {cashier.phone}</Text>}
           {cashier.email && <Text style={styles.cardDetail}>✉️ {cashier.email}</Text>}
+          {cashier.branch_name && <Text style={styles.cardDetail}>🏢 {cashier.branch_name}</Text>}
           <View style={[styles.statusBadge, cashier.is_approved ? styles.statusApproved : styles.statusPending]}>
             <Text style={styles.statusText}>{cashier.is_approved ? '✅ Approved' : '⏳ Pending'}</Text>
           </View>
@@ -142,12 +144,32 @@ function CashierCard({ cashier, onApprove, onView }: { cashier: any; onApprove: 
   );
 }
 
-function UserDetailModal({ visible, user, onClose, onApprove, onReject }: {
+function UserDetailModal({ visible, user, onClose, onApprove, onReject, onBranchAssigned }: {
   visible: boolean; user: any;
   onClose: () => void; onApprove?: () => void; onReject?: (reason: string) => void;
+  onBranchAssigned?: () => void;
 }) {
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
+  const [branches, setBranches] = useState<any[]>([]);
+  const [assigningBranch, setAssigningBranch] = useState(false);
+
+  useEffect(() => {
+    if (visible) {
+      authAPI.getBranches().then(res => setBranches(res.data)).catch(() => {});
+    }
+  }, [visible]);
+
+  const handleAssignBranch = async (branchId: number | null) => {
+    if (!user) return;
+    setAssigningBranch(true);
+    try {
+      await authAPI.assignCashierBranch(user.id, branchId);
+      Alert.alert('Success', branchId ? 'Hub assigned successfully.' : 'Hub removed.');
+      onBranchAssigned?.();
+    } catch { Alert.alert('Error', 'Failed to assign hub'); }
+    finally { setAssigningBranch(false); }
+  };
 
   if (!user) return null;
 
@@ -189,6 +211,33 @@ function UserDetailModal({ visible, user, onClose, onApprove, onReject }: {
                 <InfoRow label="Phone" value={user.phone} />
                 <InfoRow label="Address" value={user.address} />
                 <InfoRow label="Member Since" value={user.created_at ? new Date(user.created_at).toLocaleDateString() : null} />
+              </View>
+              <View style={styles.infoSection}>
+                <Text style={styles.infoSectionTitle}>🏢 Assigned Hub</Text>
+                {user.branch_name ? (
+                  <View style={styles.assignedHubRow}>
+                    <Text style={styles.assignedHubName}>{user.branch_name}</Text>
+                    <TouchableOpacity style={styles.removeHubBtn} onPress={() => handleAssignBranch(null)} disabled={assigningBranch}>
+                      <Text style={styles.removeHubBtnText}>Remove</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <Text style={styles.noHubText}>⚠️ No hub assigned</Text>
+                )}
+                <Text style={styles.assignHubLabel}>Assign to Hub:</Text>
+                {branches.map(b => (
+                  <TouchableOpacity
+                    key={b.id}
+                    style={[styles.branchOption, user.branch === b.id && styles.branchOptionActive]}
+                    onPress={() => handleAssignBranch(b.id)}
+                    disabled={assigningBranch || user.branch === b.id}
+                  >
+                    <Text style={[styles.branchOptionText, user.branch === b.id && styles.branchOptionTextActive]}>
+                      {user.branch === b.id ? '✅ ' : ''}{b.name}
+                    </Text>
+                    <Text style={styles.branchOptionAddr}>{b.address}</Text>
+                  </TouchableOpacity>
+                ))}
               </View>
               <View style={styles.infoSection}>
                 <Text style={styles.infoSectionTitle}>Identity Verification</Text>
@@ -299,4 +348,15 @@ const styles = StyleSheet.create({
   reasonCancelText: { fontSize: 14, fontWeight: '600', color: '#666' },
   reasonSubmitBtn: { flex: 1, padding: 14, borderRadius: 12, backgroundColor: '#ED1C24', alignItems: 'center' },
   reasonSubmitText: { fontSize: 14, fontWeight: 'bold', color: '#fff' },
+  assignedHubRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+  assignedHubName: { fontSize: 14, fontWeight: '700', color: '#0D47A1', flex: 1 },
+  removeHubBtn: { backgroundColor: '#FFEBEE', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
+  removeHubBtnText: { fontSize: 12, fontWeight: '600', color: '#C62828' },
+  noHubText: { fontSize: 13, color: '#FF9800', fontWeight: '600', marginBottom: 10 },
+  assignHubLabel: { fontSize: 12, color: '#888', fontWeight: '600', marginBottom: 8, marginTop: 4 },
+  branchOption: { padding: 12, borderRadius: 10, borderWidth: 1, borderColor: '#e0e0e0', marginBottom: 8, backgroundColor: '#fafafa' },
+  branchOptionActive: { borderColor: '#1565C0', backgroundColor: '#E3F2FD' },
+  branchOptionText: { fontSize: 13, fontWeight: '700', color: '#333', marginBottom: 2 },
+  branchOptionTextActive: { color: '#0D47A1' },
+  branchOptionAddr: { fontSize: 11, color: '#888' },
 });

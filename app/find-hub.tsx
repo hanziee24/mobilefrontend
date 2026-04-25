@@ -3,6 +3,7 @@ import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, 
 import { router } from 'expo-router';
 import { authAPI } from '../services/api';
 import { ArrowLeft, MapPin } from 'lucide-react-native';
+import * as Location from 'expo-location';
 
 interface Branch {
   id: number;
@@ -10,6 +11,7 @@ interface Branch {
   address: string;
   latitude: string | null;
   longitude: string | null;
+  distance_km?: number;
 }
 
 export default function FindHub() {
@@ -17,10 +19,23 @@ export default function FindHub() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    authAPI.getBranches()
-      .then((res) => setBranches(res.data))
-      .catch(() => Alert.alert('Error', 'Failed to load hubs'))
-      .finally(() => setLoading(false));
+    (async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status === 'granted') {
+          const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+          const res = await authAPI.getNearestHub(loc.coords.latitude, loc.coords.longitude);
+          setBranches(res.data);
+        } else {
+          const res = await authAPI.getBranches();
+          setBranches(res.data);
+        }
+      } catch {
+        Alert.alert('Error', 'Failed to load hubs');
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, []);
 
   const openMap = (branch: Branch) => {
@@ -49,13 +64,19 @@ export default function FindHub() {
           keyExtractor={(item) => String(item.id)}
           contentContainerStyle={{ padding: 15, gap: 12 }}
           ListEmptyComponent={<Text style={styles.empty}>No hubs available</Text>}
-          renderItem={({ item }) => (
-            <View style={styles.card}>
+          renderItem={({ item, index }) => (
+            <View style={[styles.card, index === 0 && item.distance_km !== undefined && styles.cardNearest]}>
               <View style={styles.cardHeader}>
-                <MapPin size={18} color="#ED1C24" strokeWidth={2.2} />
+                <MapPin size={18} color={index === 0 && item.distance_km !== undefined ? '#1565C0' : '#ED1C24'} strokeWidth={2.2} />
                 <Text style={styles.branchName}>{item.name}</Text>
+                {index === 0 && item.distance_km !== undefined && (
+                  <View style={styles.nearestBadge}><Text style={styles.nearestBadgeText}>Nearest</Text></View>
+                )}
               </View>
               <Text style={styles.address}>{item.address}</Text>
+              {item.distance_km !== undefined && (
+                <Text style={styles.distanceText}>{item.distance_km} km away</Text>
+              )}
               <TouchableOpacity style={styles.mapBtn} onPress={() => openMap(item)}>
                 <Text style={styles.mapBtnText}>Open in Maps</Text>
               </TouchableOpacity>
@@ -78,4 +99,8 @@ const styles = StyleSheet.create({
   mapBtn: { backgroundColor: '#ED1C24', paddingVertical: 8, borderRadius: 8, alignItems: 'center' },
   mapBtnText: { color: '#fff', fontWeight: '600', fontSize: 13 },
   empty: { textAlign: 'center', color: '#999', marginTop: 40 },
+  cardNearest: { borderWidth: 2, borderColor: '#1565C0' },
+  nearestBadge: { backgroundColor: '#1565C0', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2, marginLeft: 'auto' },
+  nearestBadgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
+  distanceText: { fontSize: 12, color: '#1565C0', fontWeight: '600', marginBottom: 8 },
 });

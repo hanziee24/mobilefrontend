@@ -109,6 +109,9 @@ export default function CashierDashboard() {
             <View style={styles.roleDot} />
             <Text style={styles.roleBadgeText}>Cashier</Text>
           </View>
+          {user?.branch_name && (
+            <Text style={styles.hubLabel}>🏢 {user.branch_name}</Text>
+          )}
         </View>
         <TouchableOpacity style={styles.menuBtn} onPress={() => setMenuVisible(true)}>
           <Menu size={22} color="#fff" strokeWidth={2.2} />
@@ -242,6 +245,7 @@ const styles = StyleSheet.create({
   roleBadge: { alignSelf: 'flex-start', backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20, flexDirection: 'row', alignItems: 'center', gap: 6 },
   roleDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#fff' },
   roleBadgeText: { fontSize: 11, color: '#fff', fontWeight: '600' },
+  hubLabel: { fontSize: 11, color: 'rgba(255,255,255,0.85)', marginTop: 4, fontWeight: '500' },
   menuBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center', marginTop: 4 },
 
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'flex-start', alignItems: 'flex-end', paddingTop: 105, paddingRight: 16 },

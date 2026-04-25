@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Alert, Image, Share } from 'react-native';
 import { router } from 'expo-router';
-import { deliveryAPI, settingsAPI } from '../services/api';
+import { deliveryAPI, settingsAPI, authAPI } from '../services/api';
 import api from '../services/api';
 import MapPicker from '../components/MapPicker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -47,10 +47,14 @@ export default function CashierCreateDelivery() {
   const [digitalRefNumber, setDigitalRefNumber] = useState('');
   const [feeOverrideEnabled, setFeeOverrideEnabled] = useState(false);
   const [feeOverrideReason, setFeeOverrideReason] = useState('');
+  const [cashierBranch, setCashierBranch] = useState<{ name: string; address: string } | null>(null);
 
   useEffect(() => {
     api.get('/auth/profile/').then(res => {
       if (res.data.gcash_qr) setCashierGcashQr(res.data.gcash_qr);
+      if (res.data.branch_name && res.data.branch_address) {
+        setCashierBranch({ name: res.data.branch_name, address: res.data.branch_address });
+      }
     }).catch(() => {});
     // Auto-fill from customer delivery request if present
     AsyncStorage.getItem('prefill_delivery_request').then(raw => {
@@ -210,6 +214,8 @@ export default function CashierCreateDelivery() {
         change: change.toFixed(2),
         created_at: new Date().toLocaleString(),
         is_linked: senderContactLinked === true,
+        hub_name: cashierBranch?.name || null,
+        hub_address: cashierBranch?.address || null,
       });
     } catch (error: any) {
       Alert.alert('Error', error.response?.data?.detail || 'Failed to create delivery');
@@ -232,6 +238,7 @@ export default function CashierCreateDelivery() {
     setSenderLat(null); setSenderLng(null);
     setReceiverLat(null); setReceiverLng(null);
     setSenderContactLinked(null);
+    setNearestHub(null);
     setFeeOverrideEnabled(false);
     setFeeOverrideReason('');
   };
@@ -245,6 +252,7 @@ export default function CashierCreateDelivery() {
       '📦 DELIVERY RECEIPT',
       `Tracking No: ${w.tracking_number}`,
       `Date: ${w.created_at}`,
+      ...(w.hub_name ? ['', '🏢 DROP-OFF HUB', `${w.hub_name}`, `${w.hub_address}`] : []),
       '',
       '📤 SENDER',
       `${w.sender_name} | ${w.sender_contact}`,
@@ -283,6 +291,13 @@ export default function CashierCreateDelivery() {
             <Text style={styles.waybillBrand}>📦 Branch Drop-off</Text>
             <Text style={styles.waybillTracking}>{waybill.tracking_number}</Text>
             <Text style={styles.waybillDate}>{waybill.created_at}</Text>
+            {waybill.hub_name && (
+              <View style={styles.waybillHubBox}>
+                <Text style={styles.waybillHubLabel}>🏢 Drop-off Hub</Text>
+                <Text style={styles.waybillHubName}>{waybill.hub_name}</Text>
+                <Text style={styles.waybillHubAddr}>{waybill.hub_address}</Text>
+              </View>
+            )}
 
             <View style={styles.waybillDivider} />
 
@@ -380,6 +395,18 @@ export default function CashierCreateDelivery() {
       </View>
 
       <ScrollView style={styles.content} contentContainerStyle={{ paddingBottom: 40 }}>
+
+        {cashierBranch ? (
+          <View style={styles.hubBanner}>
+            <Text style={styles.hubBannerLabel}>🏢 Drop-off Hub</Text>
+            <Text style={styles.hubBannerName}>{cashierBranch.name}</Text>
+            <Text style={styles.hubBannerAddr}>{cashierBranch.address}</Text>
+          </View>
+        ) : (
+          <View style={styles.hubBannerWarn}>
+            <Text style={styles.hubBannerWarnText}>⚠️ No hub assigned — ask admin to assign you to a branch</Text>
+          </View>
+        )}
 
         {/* Sender */}
         <Text style={styles.sectionTitle}>📤 Sender Information</Text>
@@ -683,4 +710,19 @@ const styles = StyleSheet.create({
   overrideToggle: { padding: 12, borderRadius: 10, borderWidth: 1, borderColor: '#ddd', backgroundColor: '#f9f9f9', alignItems: 'center', marginBottom: 10 },
   overrideToggleActive: { borderColor: '#1565C0', backgroundColor: '#E3F2FD' },
   overrideToggleText: { fontSize: 13, fontWeight: '600', color: '#888' },
+  hubBanner: { backgroundColor: '#E3F2FD', borderRadius: 12, padding: 14, marginBottom: 16, borderWidth: 2, borderColor: '#1565C0' },
+  hubBannerLabel: { fontSize: 11, fontWeight: '700', color: '#1565C0', textTransform: 'uppercase', marginBottom: 4 },
+  hubBannerName: { fontSize: 16, fontWeight: 'bold', color: '#0D47A1', marginBottom: 2 },
+  hubBannerAddr: { fontSize: 12, color: '#555' },
+  hubBannerWarn: { backgroundColor: '#FFF3E0', borderRadius: 12, padding: 14, marginBottom: 16, borderWidth: 1, borderColor: '#FF9800' },
+  hubBannerWarnText: { fontSize: 13, color: '#E65100', fontWeight: '600', textAlign: 'center' },
+  waybillHubBox: { backgroundColor: '#E3F2FD', borderRadius: 8, padding: 10, marginTop: 8, borderWidth: 1, borderColor: '#1565C0' },
+  waybillHubLabel: { fontSize: 10, fontWeight: '700', color: '#1565C0', textTransform: 'uppercase', marginBottom: 3 },
+  waybillHubName: { fontSize: 14, fontWeight: 'bold', color: '#0D47A1', marginBottom: 1 },
+  waybillHubAddr: { fontSize: 12, color: '#555' },
+  nearestHubBox: { backgroundColor: '#E3F2FD', borderRadius: 10, padding: 12, marginTop: 8, borderWidth: 1, borderColor: '#1565C0' },
+  nearestHubTitle: { fontSize: 11, fontWeight: '700', color: '#1565C0', textTransform: 'uppercase', marginBottom: 4 },
+  nearestHubName: { fontSize: 14, fontWeight: 'bold', color: '#0D47A1', marginBottom: 2 },
+  nearestHubAddr: { fontSize: 12, color: '#555', marginBottom: 2 },
+  nearestHubDist: { fontSize: 12, fontWeight: '600', color: '#1565C0' },
 });

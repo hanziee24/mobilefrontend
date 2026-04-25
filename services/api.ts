@@ -210,6 +210,8 @@ export const authAPI = {
     vehicle_type?: string; vehicle_brand?: string; license_number?: string;
   }) => api.post('/auth/create-staff/', data),
   getBranches: () => api.get('/auth/branches/'),
+  getNearestHub: (lat: number, lng: number) => api.get(`/auth/nearest-hub/?lat=${lat}&lng=${lng}`),
+  assignCashierBranch: (userId: number, branchId: number | null) => api.patch(`/auth/riders/${userId}/assign-branch/`, { branch_id: branchId }),
   assignBranch: (userId: number, branchId: number | null) => api.patch(`/auth/riders/${userId}/assign-branch/`, { branch_id: branchId }),
   createBranch: (data: { name: string; address: string; latitude?: number; longitude?: number }) => api.post('/auth/branches/', data),
   updateBranch: (id: number, data: { name?: string; address?: string; latitude?: number; longitude?: number }) => api.patch(`/auth/branches/${id}/`, data),
