@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Image, Modal } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { deliveryAPI, API_URL } from '../services/api';
+import { deliveryAPI } from '../services/api';
+import { resolveMediaUrl } from '../utils/media';
 import { ArrowLeft, ChevronDown, ChevronRight, House, Package, Package2, UserRound } from 'lucide-react-native';
 
 interface Delivery {
@@ -101,6 +102,8 @@ export default function OrderHistory() {
         ) : (
           orders.map((order) => {
             const isExpanded = expandedId === order.id;
+            const packagePhotoUrl = resolveMediaUrl(order.package_photo);
+            const proofOfDeliveryUrl = resolveMediaUrl(order.proof_of_delivery);
             return (
               <View key={order.id} style={styles.orderCard}>
                 <TouchableOpacity onPress={() => toggleExpand(order.id)}>
@@ -176,17 +179,12 @@ export default function OrderHistory() {
                           <Text style={styles.detailValue}>{order.special_instructions}</Text>
                         </View>
                       )}
-                      {order.package_photo && (
+                      {packagePhotoUrl && (
                         <TouchableOpacity onPress={() => {
-                          const uri = order.package_photo!.startsWith('http')
-                            ? order.package_photo!
-                            : `${API_URL.replace('/api', '')}/media/${order.package_photo}`;
-                          setProofImage(uri);
+                          setProofImage(packagePhotoUrl);
                         }}>
                           <Image
-                            source={{ uri: order.package_photo.startsWith('http')
-                              ? order.package_photo
-                              : `${API_URL.replace('/api', '')}/media/${order.package_photo}` }}
+                            source={{ uri: packagePhotoUrl }}
                             style={styles.proofThumb}
                           />
                           <Text style={styles.proofHint}>Package photo — tap to enlarge</Text>
@@ -231,19 +229,14 @@ export default function OrderHistory() {
                     )}
 
                     {/* Proof of Delivery */}
-                    {order.status === 'DELIVERED' && order.proof_of_delivery && (
+                    {order.status === 'DELIVERED' && proofOfDeliveryUrl && (
                       <View style={styles.section}>
                         <Text style={styles.sectionTitle}>Proof of Delivery</Text>
                         <TouchableOpacity onPress={() => {
-                          const uri = order.proof_of_delivery!.startsWith('http')
-                            ? order.proof_of_delivery!
-                            : `${API_URL.replace('/api', '')}/media/${order.proof_of_delivery}`;
-                          setProofImage(uri);
+                          setProofImage(proofOfDeliveryUrl);
                         }}>
                           <Image
-                            source={{ uri: order.proof_of_delivery.startsWith('http')
-                              ? order.proof_of_delivery
-                              : `${API_URL.replace('/api', '')}/media/${order.proof_of_delivery}` }}
+                            source={{ uri: proofOfDeliveryUrl }}
                             style={styles.proofThumb}
                           />
                           <Text style={styles.proofHint}>Tap to view full image</Text>

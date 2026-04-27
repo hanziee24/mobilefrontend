@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { deliveryAPI, authAPI, settingsAPI } from '../services/api';
 import MapPicker from '../components/MapPicker';
 import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
 import {
   Info,
   SendHorizontal,
@@ -50,6 +51,20 @@ const updateAddressLabel = (currentValue: string, nextLabel: string) => {
   if (!coords) return nextLabel;
 
   return `${nextLabel}|${coords.lat},${coords.lng}`;
+};
+
+const geocodeAddressLabel = async (value: string) => {
+  const label = formatAddressLabel(value);
+  if (!label) return null;
+
+  try {
+    const results = await Location.geocodeAsync(label);
+    const first = results[0];
+    if (!first) return null;
+    return { lat: first.latitude, lng: first.longitude };
+  } catch {
+    return null;
+  }
 };
 
 function FlowIndicator() {
@@ -137,27 +152,45 @@ export default function CreateDelivery() {
       Alert.alert('Missing Fields', 'Please fill in all required fields marked with *');
       return;
     }
-    if (!extractCoordinatesFromAddress(receiverAddress)) {
-      Alert.alert('Pin Required', 'Please tap the map button and pin the delivery address before submitting.');
-      return;
-    }
     setLoading(true);
     try {
-      const res = await deliveryAPI.createDeliveryRequest({
-        sender_name: senderName,
-        sender_contact: senderContact,
-        sender_address: senderAddress,
-        receiver_name: receiverName,
-        receiver_contact: receiverContact,
-        receiver_address: receiverAddress,
-        item_type: itemType,
-        weight: weightInKg.toFixed(3),
-        quantity,
-        is_fragile: isFragile,
-        special_instructions: specialInstructions,
-      preferred_payment_method: preferredPayment,
-      });
-      setTrackingHint(res?.data?.tracking_number || '');
+      const receiverCoordinates =
+        extractCoordinatesFromAddress(receiverAddress) || await geocodeAddressLabel(receiverAddress);
+      const receiverAddressValue = receiverCoordinates
+        ? `${formatAddressLabel(receiverAddress)}|${receiverCoordinates.lat},${receiverCoordinates.lng}`
+        : receiverAddress;
+      const senderCoordinates =
+        extractCoordinatesFromAddress(senderAddress) || await geocodeAddressLabel(senderAddress);
+      const senderAddressValue = senderCoordinates
+        ? `${formatAddressLabel(senderAddress)}|${senderCoordinates.lat},${senderCoordinates.lng}`
+        : senderAddress;
+
+      const formData = new FormData();
+      formData.append('sender_name', senderName);
+      formData.append('sender_contact', senderContact);
+      formData.append('sender_address', senderAddressValue);
+      formData.append('receiver_name', receiverName);
+      formData.append('receiver_contact', receiverContact);
+      formData.append('receiver_address', receiverAddressValue);
+      formData.append('item_type', itemType);
+      formData.append('weight', weightInKg.toFixed(3));
+      formData.append('quantity', quantity);
+      formData.append('is_fragile', isFragile ? 'true' : 'false');
+      formData.append('preferred_payment_method', preferredPayment);
+      if (specialInstructions.trim()) {
+        formData.append('special_instructions', specialInstructions.trim());
+      }
+      if (packagePhoto) {
+        const filename = (packagePhoto.split('/').pop() || 'package.jpg').replace(/[^a-zA-Z0-9._-]/g, '_');
+        formData.append('package_photo', {
+          uri: packagePhoto,
+          name: filename,
+          type: 'image/jpeg',
+        } as any);
+      }
+
+      const res = await deliveryAPI.createDeliveryRequest(formData);
+      setTrackingHint(String(res?.data?.id || res?.data?.tracking_number || ''));
       setSubmitted(true);
     } catch {
       Alert.alert('Error', 'Failed to send request to cashier. Please try again.');
@@ -312,10 +345,10 @@ export default function CreateDelivery() {
         </TouchableOpacity>
 
         <Text style={styles.label}>Package Photo (Optional)</Text>
-        <TouchableOpacity style={styles.photoBtn} onPress={pickImage}>
+        <TouchableOpacity style={[styles.photoBtn, packagePhoto && styles.photoBtnFilled]} onPress={pickImage}>
           {packagePhoto ? (
-            <View style={{ alignItems: 'center' }}>
-              <Image source={{ uri: packagePhoto }} style={styles.photoPreview} />
+            <View style={styles.photoPreviewWrap}>
+              <Image source={{ uri: packagePhoto }} style={styles.photoPreview} resizeMode="cover" />
               <Text style={styles.retakeText}>Tap to Retake</Text>
             </View>
           ) : (
@@ -434,11 +467,13 @@ const styles = StyleSheet.create({
   fragileBtn: { padding: 14, borderRadius: 10, borderWidth: 2, borderColor: '#ddd', backgroundColor: '#fff', marginTop: 10, flexDirection: 'row', alignItems: 'center', gap: 10 },
   fragileBtnActive: { borderColor: '#FF9800', backgroundColor: '#FFF3E0' },
   fragileText: { fontSize: 14, fontWeight: '600', color: '#666' },
-  photoBtn: { borderWidth: 2, borderColor: '#ddd', borderStyle: 'dashed', borderRadius: 10, padding: 20, alignItems: 'center', backgroundColor: '#f9f9f9' },
+  photoBtn: { borderWidth: 2, borderColor: '#ddd', borderStyle: 'dashed', borderRadius: 10, padding: 20, alignItems: 'center', backgroundColor: '#f9f9f9', overflow: 'hidden' },
+  photoBtnFilled: { padding: 12 },
   photoBtnInner: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   photoBtnText: { fontSize: 15, color: '#666' },
+  photoPreviewWrap: { width: '100%', alignItems: 'center' },
   retakeText: { fontSize: 13, color: '#2196F3', fontWeight: '600', marginTop: 8 },
-  photoPreview: { width: '100%', height: 180, borderRadius: 10 },
+  photoPreview: { width: '100%', height: 220, borderRadius: 10, backgroundColor: '#eaeaea' },
   feePreview: { backgroundColor: '#fff', borderRadius: 12, padding: 16, alignItems: 'center', marginTop: 20, borderWidth: 2, borderColor: '#ED1C24' },
   feePreviewLabel: { fontSize: 12, color: '#888', marginBottom: 4 },
   feePreviewAmount: { fontSize: 30, fontWeight: 'bold', color: '#ED1C24', marginBottom: 4 },

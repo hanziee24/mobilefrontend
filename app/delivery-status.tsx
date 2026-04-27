@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Image, Modal, Alert } from 'react-native';
 import { router } from 'expo-router';
-import { deliveryAPI, API_URL } from '../services/api';
+import { deliveryAPI } from '../services/api';
+import { resolveMediaUrl } from '../utils/media';
 
 interface Delivery {
   id: number;
@@ -10,34 +11,59 @@ interface Delivery {
   created_at: string;
   updated_at: string;
   delivery_address: string;
-  proof_of_delivery?: string;
-  estimated_time?: string;
+  proof_of_delivery?: string | null;
+  estimated_time?: string | null;
+}
+
+interface DeliveryRequest {
+  id: number;
+  sender_name: string;
+  receiver_name: string;
+  receiver_address: string;
+  status: 'PENDING' | 'ACCEPTED' | 'CANCELLED';
+  created_at: string;
+}
+
+interface PendingItem {
+  id: string;
+  kind: 'request' | 'delivery';
+  title: string;
+  address: string;
+  createdAt: string;
+  status: string;
+  requestId?: number;
+  deliveryId?: number;
 }
 
 const STEPS = [
-  { key: 'PENDING', label: 'Pending', icon: '⏳' },
-  { key: 'PICKED_UP', label: 'Picked Up', icon: '📦' },
-  { key: 'IN_TRANSIT', label: 'In Transit', icon: '🚚' },
-  { key: 'DELIVERED', label: 'Delivered', icon: '✓' },
+  { key: 'PENDING', label: 'Pending', icon: '1' },
+  { key: 'PICKED_UP', label: 'Picked Up', icon: '2' },
+  { key: 'IN_TRANSIT', label: 'In Transit', icon: '3' },
+  { key: 'DELIVERED', label: 'Delivered', icon: '4' },
 ];
 
 const STATUS_ORDER: Record<string, number> = {
-  PENDING: 0, PICKED_UP: 1, IN_TRANSIT: 1, OUT_FOR_DELIVERY: 2, DELIVERED: 3,
+  PENDING: 0,
+  PICKED_UP: 1,
+  IN_TRANSIT: 1,
+  OUT_FOR_DELIVERY: 2,
+  DELIVERED: 3,
 };
 
 function StatusTimeline({ status }: { status: string }) {
   const current = STATUS_ORDER[status] ?? 0;
+
   return (
-    <View style={tlStyles.row}>
-      {STEPS.map((step, i) => {
-        const done = i <= current;
+    <View style={timelineStyles.row}>
+      {STEPS.map((step, index) => {
+        const done = index <= current;
         return (
-          <View key={step.key} style={tlStyles.stepWrap}>
-            {i > 0 && <View style={[tlStyles.line, done && tlStyles.lineDone]} />}
-            <View style={[tlStyles.dot, done && tlStyles.dotDone]}>
-              <Text style={tlStyles.dotIcon}>{step.icon}</Text>
+          <View key={step.key} style={timelineStyles.stepWrap}>
+            {index > 0 && <View style={[timelineStyles.line, done && timelineStyles.lineDone]} />}
+            <View style={[timelineStyles.dot, done && timelineStyles.dotDone]}>
+              <Text style={timelineStyles.dotIcon}>{step.icon}</Text>
             </View>
-            <Text style={[tlStyles.label, done && tlStyles.labelDone]}>{step.label}</Text>
+            <Text style={[timelineStyles.label, done && timelineStyles.labelDone]}>{step.label}</Text>
           </View>
         );
       })}
@@ -46,23 +72,29 @@ function StatusTimeline({ status }: { status: string }) {
 }
 
 export default function DeliveryStatus() {
-  const [activeTab, setActiveTab] = useState('in-transit');
+  const [activeTab, setActiveTab] = useState<'pending' | 'in-transit' | 'delivered'>('pending');
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
+  const [deliveryRequests, setDeliveryRequests] = useState<DeliveryRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [proofImage, setProofImage] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchDeliveries();
-    const interval = setInterval(fetchDeliveries, 5000);
+    void fetchDeliveries();
+    const interval = setInterval(() => {
+      void fetchDeliveries();
+    }, 5000);
     return () => clearInterval(interval);
   }, []);
 
   const fetchDeliveries = async () => {
     try {
-      const response = await deliveryAPI.getAllDeliveries();
-      setDeliveries(response.data);
+      const [deliveriesResponse, requestsResponse] = await Promise.all([
+        deliveryAPI.getAllDeliveries(),
+        deliveryAPI.getDeliveryRequests(),
+      ]);
+      setDeliveries(deliveriesResponse.data);
+      setDeliveryRequests(requestsResponse.data);
     } catch (error: any) {
-      // Silently handle auth errors
       if (error.response?.status !== 403 && error.response?.status !== 401) {
         console.log('Error fetching deliveries:', error);
       }
@@ -71,33 +103,80 @@ export default function DeliveryStatus() {
     }
   };
 
-  const filterByStatus = (status: string[]) => {
-    return deliveries.filter(d => status.includes(d.status));
-  };
+  const filterByStatus = (statusList: string[]) => deliveries.filter((delivery) => statusList.includes(delivery.status));
 
-  const handleCancel = (order: Delivery) => {
-    Alert.alert('Cancel Delivery', `Cancel ${order.tracking_number}?`, [
+  const pending = useMemo<PendingItem[]>(() => {
+    const requestItems = deliveryRequests
+      .filter((request) => request.status === 'PENDING' || request.status === 'ACCEPTED')
+      .map((request) => ({
+        id: `request-${request.id}`,
+        kind: 'request' as const,
+        title: `${request.sender_name} -> ${request.receiver_name}`,
+        address: request.receiver_address?.split('|')[0].trim() || request.receiver_address,
+        createdAt: request.created_at,
+        status: request.status === 'ACCEPTED' ? 'Awaiting cashier processing' : 'Waiting for cashier approval',
+        requestId: request.id,
+      }));
+
+    const deliveryItems = filterByStatus(['PENDING']).map((delivery) => ({
+      id: `delivery-${delivery.id}`,
+      kind: 'delivery' as const,
+      title: delivery.tracking_number,
+      address: delivery.delivery_address?.split('|')[0].trim() || delivery.delivery_address,
+      createdAt: delivery.created_at,
+      status: delivery.status,
+      deliveryId: delivery.id,
+    }));
+
+    return [...requestItems, ...deliveryItems].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+  }, [deliveryRequests, deliveries]);
+
+  const inTransit = filterByStatus(['PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY']);
+  const delivered = filterByStatus(['DELIVERED']);
+
+  const handleCancelDelivery = (delivery: Delivery) => {
+    Alert.alert('Cancel Delivery', `Cancel ${delivery.tracking_number}?`, [
       { text: 'No', style: 'cancel' },
-      { text: 'Yes, Cancel', style: 'destructive', onPress: async () => {
-        try {
-          await deliveryAPI.cancelDelivery(order.id);
-          fetchDeliveries();
-        } catch (error: any) {
-          Alert.alert('Error', error.response?.data?.error || 'Failed to cancel delivery');
-        }
-      }},
+      {
+        text: 'Yes, Cancel',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deliveryAPI.cancelDelivery(delivery.id);
+            await fetchDeliveries();
+          } catch (error: any) {
+            Alert.alert('Error', error.response?.data?.error || 'Failed to cancel delivery');
+          }
+        },
+      },
     ]);
   };
 
-  const pending = filterByStatus(['PENDING']);
-  const inTransit = filterByStatus(['PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY']);
-  const delivered = filterByStatus(['DELIVERED']);
+  const handleCancelRequest = (request: DeliveryRequest) => {
+    Alert.alert('Cancel Request', `Cancel request #${request.id}?`, [
+      { text: 'No', style: 'cancel' },
+      {
+        text: 'Yes, Cancel',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deliveryAPI.cancelDeliveryRequest(request.id);
+            await fetchDeliveries();
+          } catch (error: any) {
+            Alert.alert('Error', error.response?.data?.error || 'Failed to cancel request');
+          }
+        },
+      },
+    ]);
+  };
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.backButton}>←</Text>
+          <Text style={styles.backButton}>{'<'}</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Delivery Status</Text>
         <View style={{ width: 30 }} />
@@ -135,78 +214,109 @@ export default function DeliveryStatus() {
           <ActivityIndicator size="large" color="#ED1C24" style={{ marginTop: 50 }} />
         ) : (
           <>
-        {activeTab === 'pending' && (pending.length === 0 ? (
-          <Text style={styles.emptyText}>No pending deliveries</Text>
-        ) : pending.map((order) => (
-          <View key={order.id} style={styles.orderCard}>
-            <View style={styles.statusIcon}>
-              <Text style={styles.iconText}>⏳</Text>
-            </View>
-            <View style={styles.orderInfo}>
-              <Text style={styles.orderId}>{order.tracking_number}</Text>
-              <Text style={styles.detail}>📍 {order.delivery_address}</Text>
-              <Text style={styles.time}>{new Date(order.created_at).toLocaleString()}</Text>
-              <StatusTimeline status={order.status} />
-              <TouchableOpacity style={styles.cancelBtn} onPress={() => handleCancel(order)}>
-                <Text style={styles.cancelBtnText}>Cancel Delivery</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )))}
+            {activeTab === 'pending' && (
+              pending.length === 0 ? (
+                <Text style={styles.emptyText}>No pending deliveries</Text>
+              ) : (
+                pending.map((item) => {
+                  const request = item.requestId ? deliveryRequests.find((entry) => entry.id === item.requestId) : null;
+                  const delivery = item.deliveryId ? deliveries.find((entry) => entry.id === item.deliveryId) : null;
 
-        {activeTab === 'in-transit' && (inTransit.length === 0 ? (
-          <Text style={styles.emptyText}>No deliveries in transit</Text>
-        ) : inTransit.map((order) => (
-          <TouchableOpacity
-            key={order.id}
-            style={styles.orderCard}
-            onPress={() => router.push({ pathname: '/track-delivery', params: { id: String(order.id) } })}
-          >
-            <View style={[styles.statusIcon, { backgroundColor: '#E8F5E9' }]}>
-              <Text style={styles.iconText}>🚚</Text>
-            </View>
-            <View style={styles.orderInfo}>
-              <Text style={styles.orderId}>{order.tracking_number}</Text>
-              <Text style={styles.detail}>📍 {order.delivery_address}</Text>
-              <Text style={styles.time}>ETA: {order.estimated_time || 'Calculating...'}</Text>
-              <StatusTimeline status={order.status} />
-            </View>
-            <Text style={styles.arrow}>›</Text>
-          </TouchableOpacity>
-        )))}
+                  return (
+                    <View key={item.id} style={styles.orderCard}>
+                      <View style={styles.statusIcon}>
+                        <Text style={styles.iconText}>P</Text>
+                      </View>
+                      <View style={styles.orderInfo}>
+                        <Text style={styles.orderId}>{item.title}</Text>
+                        <Text style={styles.detail}>Address: {item.address}</Text>
+                        <Text style={styles.time}>{new Date(item.createdAt).toLocaleString()}</Text>
+                        {item.kind === 'request' ? (
+                          <View style={styles.requestBadge}>
+                            <Text style={styles.requestBadgeText}>{item.status}</Text>
+                          </View>
+                        ) : (
+                          <StatusTimeline status={item.status} />
+                        )}
 
-        {activeTab === 'delivered' && (delivered.length === 0 ? (
-          <Text style={styles.emptyText}>No delivered orders</Text>
-        ) : delivered.map((order) => (
-          <View key={order.id} style={styles.orderCard}>
-            <View style={[styles.statusIcon, { backgroundColor: '#E8F5E9' }]}>
-              <Text style={styles.iconText}>✓</Text>
-            </View>
-            <View style={styles.orderInfo}>
-              <Text style={styles.orderId}>{order.tracking_number}</Text>
-              <Text style={styles.detail}>{order.delivery_address}</Text>
-              <Text style={styles.time}>{new Date(order.updated_at).toLocaleString()}</Text>
-              <StatusTimeline status={order.status} />
-              {order.proof_of_delivery && (
-                <TouchableOpacity
-                  style={styles.proofBtn}
-                  onPress={() => setProofImage(`${API_URL.replace('/api', '')}${order.proof_of_delivery}`)}
-                >
-                  <Text style={styles.proofBtnText}>📸 View Proof of Delivery</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-          </View>
-        )))}
+                        {request?.status === 'PENDING' ? (
+                          <TouchableOpacity style={styles.cancelBtn} onPress={() => handleCancelRequest(request)}>
+                            <Text style={styles.cancelBtnText}>Cancel Request</Text>
+                          </TouchableOpacity>
+                        ) : null}
+
+                        {delivery ? (
+                          <TouchableOpacity style={styles.cancelBtn} onPress={() => handleCancelDelivery(delivery)}>
+                            <Text style={styles.cancelBtnText}>Cancel Delivery</Text>
+                          </TouchableOpacity>
+                        ) : null}
+                      </View>
+                    </View>
+                  );
+                })
+              )
+            )}
+
+            {activeTab === 'in-transit' && (
+              inTransit.length === 0 ? (
+                <Text style={styles.emptyText}>No deliveries in transit</Text>
+              ) : (
+                inTransit.map((order) => (
+                  <TouchableOpacity
+                    key={order.id}
+                    style={styles.orderCard}
+                    onPress={() => router.push({ pathname: '/track-delivery', params: { id: String(order.id) } })}
+                  >
+                    <View style={[styles.statusIcon, { backgroundColor: '#E8F5E9' }]}>
+                      <Text style={styles.iconText}>T</Text>
+                    </View>
+                    <View style={styles.orderInfo}>
+                      <Text style={styles.orderId}>{order.tracking_number}</Text>
+                      <Text style={styles.detail}>Address: {order.delivery_address?.split('|')[0].trim()}</Text>
+                      <Text style={styles.time}>ETA: {order.estimated_time || 'Calculating...'}</Text>
+                      <StatusTimeline status={order.status} />
+                    </View>
+                    <Text style={styles.arrow}>{'>'}</Text>
+                  </TouchableOpacity>
+                ))
+              )
+            )}
+
+            {activeTab === 'delivered' && (
+              delivered.length === 0 ? (
+                <Text style={styles.emptyText}>No delivered orders</Text>
+              ) : (
+                delivered.map((order) => {
+                  const proofUrl = resolveMediaUrl(order.proof_of_delivery);
+                  return (
+                    <View key={order.id} style={styles.orderCard}>
+                      <View style={[styles.statusIcon, { backgroundColor: '#E8F5E9' }]}>
+                        <Text style={styles.iconText}>D</Text>
+                      </View>
+                      <View style={styles.orderInfo}>
+                        <Text style={styles.orderId}>{order.tracking_number}</Text>
+                        <Text style={styles.detail}>Address: {order.delivery_address?.split('|')[0].trim()}</Text>
+                        <Text style={styles.time}>{new Date(order.updated_at).toLocaleString()}</Text>
+                        <StatusTimeline status={order.status} />
+                        {proofUrl ? (
+                          <TouchableOpacity style={styles.proofBtn} onPress={() => setProofImage(proofUrl)}>
+                            <Text style={styles.proofBtnText}>View Proof of Delivery</Text>
+                          </TouchableOpacity>
+                        ) : null}
+                      </View>
+                    </View>
+                  );
+                })
+              )
+            )}
           </>
         )}
       </ScrollView>
 
-      {/* Full screen proof image modal */}
       <Modal visible={!!proofImage} transparent animationType="fade">
         <TouchableOpacity style={styles.modalOverlay} onPress={() => setProofImage(null)}>
-          <Image source={{ uri: proofImage! }} style={styles.fullImage} resizeMode="contain" />
-          <Text style={styles.modalClose}>✕ Tap anywhere to close</Text>
+          <Image source={{ uri: proofImage || undefined }} style={styles.fullImage} resizeMode="contain" />
+          <Text style={styles.modalClose}>Tap anywhere to close</Text>
         </TouchableOpacity>
       </Modal>
     </View>
@@ -268,11 +378,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: 12,
   },
-  iconText: { fontSize: 24 },
+  iconText: { fontSize: 20, fontWeight: '700', color: '#ED1C24' },
   orderInfo: { flex: 1 },
   orderId: { fontSize: 16, fontWeight: '600', color: '#333', marginBottom: 4 },
   detail: { fontSize: 14, color: '#666', marginBottom: 2 },
   time: { fontSize: 12, color: '#999' },
+  requestBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#FFF3E0',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    marginTop: 10,
+  },
+  requestBadgeText: {
+    fontSize: 11,
+    color: '#E65100',
+    fontWeight: '700',
+  },
   arrow: { fontSize: 24, color: '#ddd' },
   emptyText: {
     textAlign: 'center',
@@ -324,7 +447,7 @@ const styles = StyleSheet.create({
   },
 });
 
-const tlStyles = StyleSheet.create({
+const timelineStyles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -354,7 +477,7 @@ const tlStyles = StyleSheet.create({
     zIndex: 1,
   },
   dotDone: { backgroundColor: '#ED1C24' },
-  dotIcon: { fontSize: 12 },
+  dotIcon: { fontSize: 12, color: '#fff', fontWeight: '700' },
   label: { fontSize: 9, color: '#aaa', marginTop: 3, textAlign: 'center' },
   labelDone: { color: '#ED1C24', fontWeight: '600' },
 });

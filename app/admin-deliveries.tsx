@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Home, LayoutDashboard, PackageCheck, UserRound } from 'lucide-react-native';
 import { authAPI, deliveryAPI } from '../services/api';
 import MapPicker from '../components/MapPicker';
+import * as Location from 'expo-location';
 
 const MAX_RIDER_DISTANCE_KM = 30;
 const formatAddressLabel = (value?: string | null) => (value || '').split('|')[0]?.trim() || value || '';
@@ -36,6 +37,20 @@ const extractCoordinatesFromAddress = (address?: string): { lat: number; lng: nu
   if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
 
   return { lat, lng };
+};
+
+const geocodeAddressLabel = async (address?: string): Promise<{ lat: number; lng: number } | null> => {
+  const label = formatAddressLabel(address);
+  if (!label) return null;
+
+  try {
+    const results = await Location.geocodeAsync(label);
+    const first = results[0];
+    if (!first) return null;
+    return { lat: first.latitude, lng: first.longitude };
+  } catch {
+    return null;
+  }
 };
 
 const distanceKm = (lat1: number, lng1: number, lat2: number, lng2: number): number => {
@@ -253,7 +268,8 @@ export default function AdminDeliveries() {
   }, [eligibleRiders, riderPickerState.canAssign, riders]);
 
   const handleApprove = async (delivery: Delivery) => {
-    setSelectedDelivery(delivery);
+    const pinnedDelivery = await ensureDeliveryCoordinates(delivery);
+    setSelectedDelivery(pinnedDelivery);
     // Refresh riders list to get latest online status
     await Promise.all([fetchRiders(), fetchBranches()]);
     setShowRiderModal(true);
@@ -283,6 +299,31 @@ export default function AdminDeliveries() {
       Alert.alert('Error', message);
     } finally {
       setSavingDeliveryPin(false);
+    }
+  };
+
+  const ensureDeliveryCoordinates = async (delivery: Delivery): Promise<Delivery> => {
+    if (extractCoordinatesFromAddress(delivery.delivery_address)) {
+      return delivery;
+    }
+
+    const coords = await geocodeAddressLabel(delivery.delivery_address);
+    if (!coords) {
+      return delivery;
+    }
+
+    try {
+      const patchedAddress = `${formatAddressLabel(delivery.delivery_address)}|${coords.lat},${coords.lng}`;
+      const response = await deliveryAPI.updateDelivery(delivery.id, {
+        delivery_address: patchedAddress,
+      });
+      const updatedDelivery = response.data as Delivery;
+      setDeliveries((current) =>
+        current.map((item) => (item.id === updatedDelivery.id ? updatedDelivery : item))
+      );
+      return updatedDelivery;
+    } catch {
+      return delivery;
     }
   };
 
@@ -395,8 +436,9 @@ export default function AdminDeliveries() {
                   <TouchableOpacity 
                     style={styles.assignBtn}
                     onPress={async () => {
+                      const pinnedDelivery = await ensureDeliveryCoordinates(delivery);
                       await Promise.all([fetchRiders(), fetchBranches()]);
-                      setSelectedDelivery(delivery);
+                      setSelectedDelivery(pinnedDelivery);
                       setShowRiderModal(true);
                     }}
                   >
@@ -507,12 +549,11 @@ export default function AdminDeliveries() {
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Select Online Rider</Text>
               <TouchableOpacity 
-                style={styles.refreshBtn}
-                onPress={async () => {
-                  await Promise.all([fetchRiders(), fetchBranches()]);
-                }}
+                style={[styles.refreshBtn, savingDeliveryPin && { opacity: 0.7 }]}
+                onPress={() => setShowDeliveryPinPicker(true)}
+                disabled={savingDeliveryPin}
               >
-                <Text style={styles.refreshBtnText}>🔄 Refresh</Text>
+                <Text style={styles.refreshBtnText}>{savingDeliveryPin ? 'Saving...' : 'Pin Location'}</Text>
               </TouchableOpacity>
             </View>
             
@@ -525,15 +566,6 @@ export default function AdminDeliveries() {
                 <Text style={styles.emptyRidersIcon}>🏍️</Text>
                 <Text style={styles.emptyRidersText}>Cannot assign rider yet</Text>
                 <Text style={styles.emptyRidersSubtext}>{riderPickerState.message}</Text>
-                {!selectedDeliveryCoordinates && selectedDelivery && (
-                  <TouchableOpacity 
-                    style={[styles.retryBtn, savingDeliveryPin && { opacity: 0.7 }]}
-                    onPress={() => setShowDeliveryPinPicker(true)}
-                    disabled={savingDeliveryPin}
-                  >
-                    <Text style={styles.retryBtnText}>{savingDeliveryPin ? 'Saving...' : 'Pin Delivery Location'}</Text>
-                  </TouchableOpacity>
-                )}
                 <TouchableOpacity 
                   style={styles.retryBtn}
                   onPress={async () => {

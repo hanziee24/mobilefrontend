@@ -249,7 +249,14 @@ export const deliveryAPI = {
   getRiderStats: () => api.get('/deliveries/rider_stats/'),
   updateRiderLocation: (latitude: number, longitude: number) => 
     api.patch('/auth/profile/', { current_latitude: latitude, current_longitude: longitude }),
-  createDeliveryRequest: (data: any) => api.post('/delivery-requests/create/', data),
+  createDeliveryRequest: (data: any) => {
+    const isMultipart = typeof FormData !== 'undefined' && data instanceof FormData;
+    return api.post(
+      '/delivery-requests/create/',
+      data,
+      isMultipart ? { headers: { 'Content-Type': 'multipart/form-data' } } : undefined
+    );
+  },
   getDeliveryRequests: () => api.get('/delivery-requests/'),
   acceptDeliveryRequest: (id: number) => api.post(`/delivery-requests/${id}/accept/`),
   cancelDeliveryRequest: (id: number) => api.post(`/delivery-requests/${id}/cancel/`),

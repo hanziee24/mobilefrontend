@@ -2,10 +2,40 @@ import { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Alert, Image, Share } from 'react-native';
 import { router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
-import { deliveryAPI, settingsAPI, authAPI } from '../services/api';
-import api from '../services/api';
+import api, { deliveryAPI, settingsAPI, authAPI } from '../services/api';
 import MapPicker from '../components/MapPicker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Location from 'expo-location';
+
+const formatAddressLabel = (value: string) => value.split('|')[0]?.trim() || value;
+
+const extractCoordinatesFromAddress = (value: string) => {
+  if (!value) return null;
+  const candidate = value.split('|').pop()?.trim() || '';
+  const parts = candidate.split(',').map((part) => part.trim());
+  if (parts.length !== 2) return null;
+
+  const lat = Number(parts[0]);
+  const lng = Number(parts[1]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+
+  return { lat, lng };
+};
+
+const geocodeAddressLabel = async (value: string) => {
+  const label = formatAddressLabel(value);
+  if (!label) return null;
+
+  try {
+    const results = await Location.geocodeAsync(label);
+    const first = results[0];
+    if (!first) return null;
+    return { lat: first.latitude, lng: first.longitude };
+  } catch {
+    return null;
+  }
+};
 
 export default function CashierCreateDelivery() {
   const [activeRequestId, setActiveRequestId] = useState<number | null>(null);
@@ -39,10 +69,6 @@ export default function CashierCreateDelivery() {
   const [waybill, setWaybill] = useState<any>(null);
   const [feeConfig, setFeeConfig] = useState({ base_fee: 50, per_kg_rate: 15, per_item_rate: 10 });
   const [mapTarget, setMapTarget] = useState<'sender' | 'receiver' | null>(null);
-  const [senderLat, setSenderLat] = useState<number | null>(null);
-  const [senderLng, setSenderLng] = useState<number | null>(null);
-  const [receiverLat, setReceiverLat] = useState<number | null>(null);
-  const [receiverLng, setReceiverLng] = useState<number | null>(null);
   const [cashierGcashQr, setCashierGcashQr] = useState<string | null>(null);
   const [digitalConfirmed, setDigitalConfirmed] = useState(false);
   const [digitalAmountReceived, setDigitalAmountReceived] = useState('');
@@ -90,8 +116,6 @@ export default function CashierCreateDelivery() {
         setDigitalConfirmed(false);
         setDigitalAmountReceived('');
         setDigitalRefNumber('');
-        setSenderLat(null); setSenderLng(null);
-        setReceiverLat(null); setReceiverLng(null);
         setSenderContactLinked(null);
         setLinkedCustomerName(null);
         setNearestHub(null);
@@ -188,22 +212,33 @@ export default function CashierCreateDelivery() {
 
     setLoading(true);
     try {
+      const resolvedReceiverCoordinates =
+        extractCoordinatesFromAddress(receiverAddress) || await geocodeAddressLabel(receiverAddress);
+      const resolvedSenderCoordinates =
+        extractCoordinatesFromAddress(senderAddress) || await geocodeAddressLabel(senderAddress);
+      const finalReceiverAddress = resolvedReceiverCoordinates
+        ? `${formatAddressLabel(receiverAddress)}|${resolvedReceiverCoordinates.lat},${resolvedReceiverCoordinates.lng}`
+        : receiverAddress;
+      const finalSenderAddress = resolvedSenderCoordinates
+        ? `${formatAddressLabel(senderAddress)}|${resolvedSenderCoordinates.lat},${resolvedSenderCoordinates.lng}`
+        : senderAddress;
+
       const formData = new FormData();
       formData.append('sender_name', senderName);
       formData.append('sender_contact', senderContact);
-      formData.append('sender_address', senderAddress.split('|')[0] || senderAddress);
+      formData.append('sender_address', formatAddressLabel(finalSenderAddress));
       formData.append('receiver_name', receiverName);
       formData.append('receiver_contact', receiverContact);
-      formData.append('receiver_address', receiverAddress.split('|')[0] || receiverAddress);
+      formData.append('receiver_address', formatAddressLabel(finalReceiverAddress));
       formData.append('pickup_address', 'Branch Drop-off');
-      formData.append('delivery_address', receiverAddress);
-      if (receiverLat && receiverLng) {
-        formData.append('delivery_latitude', receiverLat.toString());
-        formData.append('delivery_longitude', receiverLng.toString());
+      formData.append('delivery_address', finalReceiverAddress);
+      if (resolvedReceiverCoordinates) {
+        formData.append('delivery_latitude', resolvedReceiverCoordinates.lat.toString());
+        formData.append('delivery_longitude', resolvedReceiverCoordinates.lng.toString());
       }
-      if (senderLat && senderLng) {
-        formData.append('sender_latitude', senderLat.toString());
-        formData.append('sender_longitude', senderLng.toString());
+      if (resolvedSenderCoordinates) {
+        formData.append('sender_latitude', resolvedSenderCoordinates.lat.toString());
+        formData.append('sender_longitude', resolvedSenderCoordinates.lng.toString());
       }
       if (activeRequestId) {
         formData.append('delivery_request_id', activeRequestId.toString());
@@ -226,7 +261,7 @@ export default function CashierCreateDelivery() {
         sender_contact: senderContact,
         receiver_name: receiverName,
         receiver_contact: receiverContact,
-        receiver_address: receiverAddress.split('|')[0] || receiverAddress,
+        receiver_address: formatAddressLabel(finalReceiverAddress),
         item_type: itemType,
         weight: weightInKg.toFixed(3),
         quantity,
@@ -270,8 +305,6 @@ export default function CashierCreateDelivery() {
     setDigitalConfirmed(false);
     setDigitalAmountReceived('');
     setDigitalRefNumber('');
-    setSenderLat(null); setSenderLng(null);
-    setReceiverLat(null); setReceiverLng(null);
     setSenderContactLinked(null);
     setNearestHub(null);
     setFeeOverrideEnabled(false);
@@ -648,15 +681,11 @@ export default function CashierCreateDelivery() {
           onSelectLocation={(address, lat, lng) => {
             if (mapTarget === 'sender') {
               setSenderAddress(`${address}|${lat},${lng}`);
-              setSenderLat(lat);
-              setSenderLng(lng);
               authAPI.getNearestHub(lat, lng).then(res => {
                 if (res.data.length > 0) setNearestHub(res.data[0]);
               }).catch(() => {});
             } else {
               setReceiverAddress(`${address}|${lat},${lng}`);
-              setReceiverLat(lat);
-              setReceiverLng(lng);
             }
             setMapTarget(null);
           }}
