@@ -488,7 +488,7 @@ export default function AuthScreen() {
                 <>
                   <Ionicons name="lock-open-outline" size={46} color="#ED1C24" style={styles.modalIcon} />
                   <Text style={styles.modalTitle}>Forgot Password</Text>
-                  <Text style={styles.modalSubtitle}>Enter your registered email and we'll send a verification code.</Text>
+                  <Text style={styles.modalSubtitle}>Enter your registered email and we will send a verification code.</Text>
                   <View style={[styles.inputWrap, { width: '100%', marginBottom: 18 }]}>
                     <Ionicons name="mail-outline" size={18} color="#888" style={styles.inputIcon} />
                     <TextInput

@@ -2,33 +2,84 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://mobilebackend-aefo.onrender.com/api';
+const ACCESS_TOKEN_KEY = 'accessToken';
+const REFRESH_TOKEN_KEY = 'refreshToken';
+const USER_TYPE_KEY = 'userType';
+const USER_ID_KEY = 'userId';
+const PUBLIC_AUTH_PATHS = [
+  '/auth/register/',
+  '/auth/login/',
+  '/auth/verify-email/',
+  '/auth/resend-verification/',
+  '/auth/reset-mpin/',
+  '/auth/forgot-password/',
+  '/auth/forgot-password/verify/',
+  '/auth/forgot-password/reset/',
+  '/auth/token/refresh/',
+];
 
 const api = axios.create({
   baseURL: API_URL,
   timeout: 45000,
 });
 
+let refreshTokenRequest: Promise<string | null> | null = null;
+
+const clearAuthStorage = async () => {
+  await AsyncStorage.multiRemove([
+    ACCESS_TOKEN_KEY,
+    REFRESH_TOKEN_KEY,
+    USER_TYPE_KEY,
+    USER_ID_KEY,
+  ]);
+};
+
+const isPublicAuthRequest = (url?: string) =>
+  PUBLIC_AUTH_PATHS.some((path) => (url || '').includes(path));
+
+const refreshAccessToken = async () => {
+  if (!refreshTokenRequest) {
+    refreshTokenRequest = (async () => {
+      const refreshToken = await AsyncStorage.getItem(REFRESH_TOKEN_KEY);
+
+      if (!refreshToken) {
+        await clearAuthStorage();
+        return null;
+      }
+
+      try {
+        const response = await axios.post(`${API_URL}/auth/token/refresh/`, {
+          refresh: refreshToken,
+        });
+        const newAccessToken = response.data?.access;
+
+        if (!newAccessToken) {
+          await clearAuthStorage();
+          return null;
+        }
+
+        await AsyncStorage.setItem(ACCESS_TOKEN_KEY, newAccessToken);
+        return newAccessToken;
+      } catch (error) {
+        await clearAuthStorage();
+        throw error;
+      } finally {
+        refreshTokenRequest = null;
+      }
+    })();
+  }
+
+  return refreshTokenRequest;
+};
+
 api.interceptors.request.use(
   async (config) => {
-    const publicAuthPaths = [
-      '/auth/register/',
-      '/auth/login/',
-      '/auth/verify-email/',
-      '/auth/resend-verification/',
-      '/auth/reset-mpin/',
-      '/auth/forgot-password/',
-      '/auth/forgot-password/verify/',
-      '/auth/forgot-password/reset/',
-    ];
-    const requestUrl = config.url || '';
-    const isPublicAuthRequest = publicAuthPaths.some((path) => requestUrl.includes(path));
-
-    if (isPublicAuthRequest && config.headers) {
+    if (isPublicAuthRequest(config.url) && config.headers) {
       delete config.headers.Authorization;
       return config;
     }
 
-    const token = await AsyncStorage.getItem('accessToken');
+    const token = await AsyncStorage.getItem(ACCESS_TOKEN_KEY);
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -40,27 +91,28 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    const originalRequest = error.config;
-    
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    const originalRequest = error.config as typeof error.config & { _retry?: boolean };
+
+    if (!originalRequest) {
+      return Promise.reject(error);
+    }
+
+    const shouldTryRefresh =
+      error.response?.status === 401 &&
+      !originalRequest._retry &&
+      !isPublicAuthRequest(originalRequest.url);
+
+    if (shouldTryRefresh) {
       originalRequest._retry = true;
-      
+
       try {
-        const refreshToken = await AsyncStorage.getItem('refreshToken');
-        if (refreshToken) {
-          const response = await axios.post(`${API_URL}/auth/token/refresh/`, {
-            refresh: refreshToken
-          });
-          
-          const newAccessToken = response.data.access;
-          await AsyncStorage.setItem('accessToken', newAccessToken);
-          
+        const newAccessToken = await refreshAccessToken();
+
+        if (newAccessToken) {
           originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
           return api(originalRequest);
         }
       } catch (refreshError) {
-        await AsyncStorage.removeItem('accessToken');
-        await AsyncStorage.removeItem('refreshToken');
         return Promise.reject(refreshError);
       }
     }
@@ -115,13 +167,13 @@ export const authAPI = {
     try {
       const response = await api.post('/auth/login/', { username, password });
       if (response.data.access) {
-        await AsyncStorage.setItem('accessToken', response.data.access);
-        await AsyncStorage.setItem('refreshToken', response.data.refresh);
+        await AsyncStorage.setItem(ACCESS_TOKEN_KEY, response.data.access);
+        await AsyncStorage.setItem(REFRESH_TOKEN_KEY, response.data.refresh);
         if (response.data.user_type) {
-          await AsyncStorage.setItem('userType', response.data.user_type);
+          await AsyncStorage.setItem(USER_TYPE_KEY, response.data.user_type);
         }
         if (response.data.user_id) {
-          await AsyncStorage.setItem('userId', response.data.user_id.toString());
+          await AsyncStorage.setItem(USER_ID_KEY, response.data.user_id.toString());
         }
         // Note: Backend now handles setting rider online status automatically
       }
@@ -149,7 +201,7 @@ export const authAPI = {
   
   logout: async () => {
     try {
-      const userType = await AsyncStorage.getItem('userType');
+      const userType = await AsyncStorage.getItem(USER_TYPE_KEY);
       // Set rider status to offline if user is a rider
       if (userType === 'RIDER') {
         try {
@@ -158,9 +210,7 @@ export const authAPI = {
           console.log('Failed to set offline status:', error);
         }
       }
-      await AsyncStorage.removeItem('accessToken');
-      await AsyncStorage.removeItem('refreshToken');
-      await AsyncStorage.removeItem('userType');
+      await clearAuthStorage();
     } catch (error) {
       console.log('Logout error:', error);
     }
@@ -168,7 +218,7 @@ export const authAPI = {
   
   validateToken: async () => {
     try {
-      const token = await AsyncStorage.getItem('accessToken');
+      const token = await AsyncStorage.getItem(ACCESS_TOKEN_KEY);
       if (!token) return false;
       
       await api.get('/auth/profile/');
@@ -176,16 +226,12 @@ export const authAPI = {
     } catch (error: any) {
       if (error.response?.status === 401) {
         try {
-          const refreshToken = await AsyncStorage.getItem('refreshToken');
-          if (refreshToken) {
-            const response = await api.post('/auth/token/refresh/', { refresh: refreshToken });
-            await AsyncStorage.setItem('accessToken', response.data.access);
+          const newAccessToken = await refreshAccessToken();
+          if (newAccessToken) {
             return true;
           }
-        } catch (refreshError) {
-          await AsyncStorage.removeItem('accessToken');
-          await AsyncStorage.removeItem('refreshToken');
-          await AsyncStorage.removeItem('userType');
+        } catch {
+          await clearAuthStorage();
         }
       }
       return false;

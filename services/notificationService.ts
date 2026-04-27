@@ -1,10 +1,7 @@
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import axios from 'axios';
-
-const API_URL = 'http://10.181.126.64:8000/api';
+import api from './api';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -52,12 +49,7 @@ export const notificationService = {
 
   async savePushToken(userId: number, token: string) {
     try {
-      const authToken = await AsyncStorage.getItem('token');
-      await axios.post(
-        `${API_URL}/users/${userId}/push-token/`,
-        { push_token: token },
-        { headers: { Authorization: `Token ${authToken}` } }
-      );
+      await api.post(`/auth/${userId}/push-token/`, { push_token: token });
     } catch (error) {
       console.error('Failed to save push token:', error);
     }
