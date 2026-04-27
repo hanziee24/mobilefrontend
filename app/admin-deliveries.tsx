@@ -4,8 +4,19 @@ import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Home, LayoutDashboard, PackageCheck, UserRound } from 'lucide-react-native';
 import { authAPI, deliveryAPI } from '../services/api';
+import MapPicker from '../components/MapPicker';
 
 const MAX_RIDER_DISTANCE_KM = 30;
+const formatAddressLabel = (value?: string | null) => (value || '').split('|')[0]?.trim() || value || '';
+
+const normalizeId = (value: unknown): string => {
+  if (value === null || value === undefined) return '';
+  return String(value).trim();
+};
+
+const normalizeName = (value?: string | null): string => {
+  return (value || '').trim().toLowerCase();
+};
 
 const toFloat = (value: unknown): number | null => {
   if (value === null || value === undefined) return null;
@@ -55,6 +66,8 @@ interface Delivery {
   status: string;
   delivery_fee: string;
   is_approved: boolean;
+  sender_address?: string;
+  pickup_address?: string;
   delivery_address: string;
   proof_of_delivery?: string;
   recipient_name?: string;
@@ -82,6 +95,10 @@ interface Branch {
   is_active?: boolean;
 }
 
+interface RiderWithHubFlag extends Rider {
+  isNearestHubMatch: boolean;
+}
+
 export default function AdminDeliveries() {
   const insets = useSafeAreaInsets();
   const navSafeInset = Math.max(insets.bottom, 0);
@@ -94,6 +111,8 @@ export default function AdminDeliveries() {
   const [showRiderModal, setShowRiderModal] = useState(false);
   const [selectedDelivery, setSelectedDelivery] = useState<Delivery | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [showDeliveryPinPicker, setShowDeliveryPinPicker] = useState(false);
+  const [savingDeliveryPin, setSavingDeliveryPin] = useState(false);
 
   useEffect(() => {
     fetchDeliveries();
@@ -143,7 +162,8 @@ export default function AdminDeliveries() {
   );
 
   const nearestBranch = useMemo(() => {
-    if (!selectedDeliveryCoordinates) return null;
+    const coords = selectedDeliveryCoordinates;
+    if (!coords) return null;
 
     let best: { branch: Branch; distance: number } | null = null;
     for (const branch of branches) {
@@ -151,7 +171,7 @@ export default function AdminDeliveries() {
       const lng = toFloat(branch.longitude);
       if (lat === null || lng === null) continue;
 
-      const branchDistance = distanceKm(lat, lng, selectedDeliveryCoordinates.lat, selectedDeliveryCoordinates.lng);
+      const branchDistance = distanceKm(lat, lng, coords.lat, coords.lng);
       if (!best || branchDistance < best.distance) {
         best = { branch, distance: branchDistance };
       }
@@ -194,8 +214,43 @@ export default function AdminDeliveries() {
 
   const eligibleRiders = useMemo(() => {
     if (!riderPickerState.canAssign || !nearestBranch) return [];
-    return riders.filter((rider) => rider.branch === nearestBranch.branch.id);
+    const nearestBranchId = normalizeId(nearestBranch.branch.id);
+    const nearestBranchName = normalizeName(nearestBranch.branch.name);
+
+    return riders.filter((rider) => {
+      const riderBranchId = normalizeId(rider.branch);
+      const riderBranchName = normalizeName(rider.branch_name);
+
+      if (riderBranchId && nearestBranchId && riderBranchId === nearestBranchId) {
+        return true;
+      }
+
+      if (riderBranchName && nearestBranchName && riderBranchName === nearestBranchName) {
+        return true;
+      }
+
+      return false;
+    });
   }, [nearestBranch, riderPickerState.canAssign, riders]);
+
+  const riderPickerList = useMemo<RiderWithHubFlag[]>(() => {
+    if (!riderPickerState.canAssign) return [];
+
+    const eligibleIds = new Set(eligibleRiders.map((rider) => rider.id));
+    return riders
+      .map((rider) => ({
+        ...rider,
+        isNearestHubMatch: eligibleIds.has(rider.id),
+      }))
+      .sort((a, b) => {
+        if (a.isNearestHubMatch !== b.isNearestHubMatch) {
+          return a.isNearestHubMatch ? -1 : 1;
+        }
+        const aName = `${a.first_name} ${a.last_name}`.trim().toLowerCase();
+        const bName = `${b.first_name} ${b.last_name}`.trim().toLowerCase();
+        return aName.localeCompare(bName);
+      });
+  }, [eligibleRiders, riderPickerState.canAssign, riders]);
 
   const handleApprove = async (delivery: Delivery) => {
     setSelectedDelivery(delivery);
@@ -204,11 +259,38 @@ export default function AdminDeliveries() {
     setShowRiderModal(true);
   };
 
+  const syncDeliveryState = (updatedDelivery: Delivery) => {
+    setSelectedDelivery(updatedDelivery);
+    setDeliveries((current) =>
+      current.map((delivery) => (delivery.id === updatedDelivery.id ? updatedDelivery : delivery))
+    );
+  };
+
+  const handleSaveDeliveryPin = async (address: string, lat: number, lng: number) => {
+    if (!selectedDelivery) return;
+
+    setSavingDeliveryPin(true);
+    try {
+      const deliveryAddress = `${formatAddressLabel(address) || formatAddressLabel(selectedDelivery.delivery_address) || 'Pinned Location'}|${lat},${lng}`;
+      const response = await deliveryAPI.updateDelivery(selectedDelivery.id, {
+        delivery_address: deliveryAddress,
+      });
+      syncDeliveryState(response.data);
+      setShowDeliveryPinPicker(false);
+      Alert.alert('Success', 'Delivery pin saved. You can assign a rider now.');
+    } catch (error: any) {
+      const message = error.response?.data?.error || 'Failed to save delivery pin.';
+      Alert.alert('Error', message);
+    } finally {
+      setSavingDeliveryPin(false);
+    }
+  };
+
   const handleAssignRider = async (riderId: number) => {
     if (!selectedDelivery) return;
     
     // Double-check rider is still online
-    const rider = eligibleRiders.find(r => r.id === riderId);
+    const rider = riderPickerList.find(r => r.id === riderId);
     if (!rider || !rider.is_online) {
       Alert.alert('Error', 'This rider is now offline. Please select another rider.');
       await fetchRiders(); // Refresh the list
@@ -443,6 +525,15 @@ export default function AdminDeliveries() {
                 <Text style={styles.emptyRidersIcon}>🏍️</Text>
                 <Text style={styles.emptyRidersText}>Cannot assign rider yet</Text>
                 <Text style={styles.emptyRidersSubtext}>{riderPickerState.message}</Text>
+                {!selectedDeliveryCoordinates && selectedDelivery && (
+                  <TouchableOpacity 
+                    style={[styles.retryBtn, savingDeliveryPin && { opacity: 0.7 }]}
+                    onPress={() => setShowDeliveryPinPicker(true)}
+                    disabled={savingDeliveryPin}
+                  >
+                    <Text style={styles.retryBtnText}>{savingDeliveryPin ? 'Saving...' : 'Pin Delivery Location'}</Text>
+                  </TouchableOpacity>
+                )}
                 <TouchableOpacity 
                   style={styles.retryBtn}
                   onPress={async () => {
@@ -452,11 +543,11 @@ export default function AdminDeliveries() {
                   <Text style={styles.retryBtnText}>Retry</Text>
                 </TouchableOpacity>
               </View>
-            ) : eligibleRiders.length === 0 ? (
+            ) : riderPickerList.length === 0 ? (
               <View style={styles.emptyRidersState}>
                 <Text style={styles.emptyRidersIcon}>🏍️</Text>
-                <Text style={styles.emptyRidersText}>No online riders in {riderPickerState.nearestHubName}</Text>
-                <Text style={styles.emptyRidersSubtext}>Please wait for a rider from that hub to come online</Text>
+                <Text style={styles.emptyRidersText}>No online riders available</Text>
+                <Text style={styles.emptyRidersSubtext}>Please wait for a rider to come online</Text>
                 <TouchableOpacity 
                   style={styles.retryBtn}
                   onPress={async () => {
@@ -468,7 +559,7 @@ export default function AdminDeliveries() {
               </View>
             ) : (
               <FlatList
-                data={eligibleRiders}
+                data={riderPickerList}
                 keyExtractor={(item) => item.id.toString()}
                 renderItem={({ item }) => (
                   <TouchableOpacity 
@@ -505,6 +596,15 @@ export default function AdminDeliveries() {
           </View>
         </View>
       </Modal>
+
+      <MapPicker
+        visible={showDeliveryPinPicker}
+        onClose={() => {
+          if (!savingDeliveryPin) setShowDeliveryPinPicker(false);
+        }}
+        onSelectLocation={handleSaveDeliveryPin}
+        initialAddress={formatAddressLabel(selectedDelivery?.delivery_address)}
+      />
 
       <View style={[styles.bottomNav, { paddingBottom: 10 + navSafeInset }]}>
         <TouchableOpacity style={styles.navBtn} onPress={() => router.replace('/admin-dashboard')}>

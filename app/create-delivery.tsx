@@ -26,6 +26,32 @@ const FLOW_STEPS = [
   { step: 3, label: 'Rider Picks Up', desc: 'Delivery starts' },
 ];
 
+const formatAddressLabel = (value: string) => value.split('|')[0]?.trim() || value;
+
+const extractCoordinatesFromAddress = (value: string) => {
+  if (!value) return null;
+  const candidate = value.split('|').pop()?.trim() || '';
+  const parts = candidate.split(',').map((part) => part.trim());
+  if (parts.length !== 2) return null;
+
+  const lat = Number(parts[0]);
+  const lng = Number(parts[1]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+
+  return { lat, lng };
+};
+
+const updateAddressLabel = (currentValue: string, nextLabel: string) => {
+  const trimmedLabel = nextLabel.trim();
+  if (!trimmedLabel) return '';
+
+  const coords = extractCoordinatesFromAddress(currentValue);
+  if (!coords) return nextLabel;
+
+  return `${nextLabel}|${coords.lat},${coords.lng}`;
+};
+
 function FlowIndicator() {
   return (
     <View style={flowStyles.container}>
@@ -111,15 +137,19 @@ export default function CreateDelivery() {
       Alert.alert('Missing Fields', 'Please fill in all required fields marked with *');
       return;
     }
+    if (!extractCoordinatesFromAddress(receiverAddress)) {
+      Alert.alert('Pin Required', 'Please tap the map button and pin the delivery address before submitting.');
+      return;
+    }
     setLoading(true);
     try {
       const res = await deliveryAPI.createDeliveryRequest({
         sender_name: senderName,
         sender_contact: senderContact,
-        sender_address: senderAddress.split('|')[0] || senderAddress,
+        sender_address: senderAddress,
         receiver_name: receiverName,
         receiver_contact: receiverContact,
-        receiver_address: receiverAddress.split('|')[0] || receiverAddress,
+        receiver_address: receiverAddress,
         item_type: itemType,
         weight: weightInKg.toFixed(3),
         quantity,
@@ -210,7 +240,13 @@ export default function CreateDelivery() {
 
         <Text style={styles.label}>Address</Text>
         <View style={styles.addressRow}>
-          <TextInput style={[styles.input, { flex: 1 }]} placeholder="Enter sender address" value={senderAddress.split('|')[0] || senderAddress} onChangeText={setSenderAddress} placeholderTextColor="#999" />
+          <TextInput
+            style={[styles.input, { flex: 1 }]}
+            placeholder="Enter sender address"
+            value={formatAddressLabel(senderAddress)}
+            onChangeText={(value) => setSenderAddress((current) => updateAddressLabel(current, value))}
+            placeholderTextColor="#999"
+          />
           <TouchableOpacity style={styles.mapBtn} onPress={() => { setMapPickerType('sender'); setShowMapPicker(true); }}>
             <MapPin size={20} color="#fff" />
           </TouchableOpacity>
@@ -228,7 +264,13 @@ export default function CreateDelivery() {
 
         <Text style={styles.label}>Delivery Address *</Text>
         <View style={styles.addressRow}>
-          <TextInput style={[styles.input, { flex: 1 }]} placeholder="Enter delivery address" value={receiverAddress.split('|')[0] || receiverAddress} onChangeText={setReceiverAddress} placeholderTextColor="#999" />
+          <TextInput
+            style={[styles.input, { flex: 1 }]}
+            placeholder="Enter delivery address"
+            value={formatAddressLabel(receiverAddress)}
+            onChangeText={(value) => setReceiverAddress((current) => updateAddressLabel(current, value))}
+            placeholderTextColor="#999"
+          />
           <TouchableOpacity style={styles.mapBtn} onPress={() => { setMapPickerType('receiver'); setShowMapPicker(true); }}>
             <MapPin size={20} color="#fff" />
           </TouchableOpacity>

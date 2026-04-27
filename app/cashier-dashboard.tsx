@@ -52,8 +52,6 @@ export default function CashierDashboard() {
 
   const handleAcceptRequest = async (req: any) => {
     try {
-      // Optimistically remove from the current queue to prevent double-accept taps
-      setPendingRequests(prev => prev.filter(r => r.id !== req.id));
       await AsyncStorage.setItem('prefill_delivery_request', JSON.stringify(req));
       router.push('/cashier-create-delivery');
     } catch {
@@ -174,7 +172,7 @@ export default function CashierDashboard() {
                 <View style={styles.requestInfo}>
                   <Text style={styles.requestName}>{req.sender_name} → {req.receiver_name}</Text>
                   <Text style={styles.requestDetail}>{req.item_type} • {req.weight}kg • Qty: {req.quantity}{req.is_fragile ? ' • ⚠️ Fragile' : ''}</Text>
-                  <Text style={styles.requestAddress} numberOfLines={1}>📍 {req.receiver_address}</Text>
+                  <Text style={styles.requestAddress} numberOfLines={1}>📍 {req.receiver_address?.split('|')[0] || req.receiver_address}</Text>
                   {req.preferred_payment_method && (
                     <Text style={styles.requestPayment}>💳 Prefers: {req.preferred_payment_method.replace('_', ' ')}</Text>
                   )}

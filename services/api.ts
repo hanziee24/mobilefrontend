@@ -233,6 +233,7 @@ export const deliveryAPI = {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
   },
+  updateDelivery: (id: number, data: any) => api.patch(`/deliveries/${id}/`, data),
   updateStatus: (id: number, status: string) => api.post(`/deliveries/${id}/update_status/`, { status }),
   cancelDelivery: (id: number) => api.post(`/deliveries/${id}/cancel/`),
   submitProofOfDelivery: (id: number, formData: FormData) => 

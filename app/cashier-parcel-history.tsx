@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Modal } from 'react-native';
 import { router } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { deliveryAPI } from '../services/api';
 
@@ -46,6 +47,12 @@ export default function CashierParcelHistory() {
     fetchDeliveries();
   }, []);
 
+  useFocusEffect(
+    useCallback(() => {
+      fetchDeliveries();
+    }, [])
+  );
+
   const fetchDeliveries = async () => {
     setLoading(true);
     try {
@@ -53,7 +60,7 @@ export default function CashierParcelHistory() {
       const res = await deliveryAPI.getAllDeliveries();
       const data = userType === 'ADMIN'
         ? res.data
-        : res.data.filter((d: Delivery) => d.pickup_address === 'Branch Drop-off');
+        : res.data.filter((d: Delivery) => (d.pickup_address || '').startsWith('Branch Drop-off'));
       setDeliveries(data);
     } catch (e) {
       console.log('Failed to load parcel history:', e);

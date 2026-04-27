@@ -1,12 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Alert, Image, Share } from 'react-native';
 import { router } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { deliveryAPI, settingsAPI, authAPI } from '../services/api';
 import api from '../services/api';
 import MapPicker from '../components/MapPicker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function CashierCreateDelivery() {
+  const [activeRequestId, setActiveRequestId] = useState<number | null>(null);
   const [senderName, setSenderName] = useState('');
   const [senderContact, setSenderContact] = useState('');
   const [senderContactLinked, setSenderContactLinked] = useState<boolean | null>(null);
@@ -57,25 +59,45 @@ export default function CashierCreateDelivery() {
         setCashierBranch({ name: res.data.branch_name, address: res.data.branch_address });
       }
     }).catch(() => {});
-    // Auto-fill from customer delivery request if present
-    AsyncStorage.getItem('prefill_delivery_request').then(raw => {
-      if (!raw) return;
-      const req = JSON.parse(raw);
-      setSenderName(req.sender_name || '');
-      setSenderContact(req.sender_contact || '');
-      setSenderAddress(req.sender_address || '');
-      setReceiverName(req.receiver_name || '');
-      setReceiverContact(req.receiver_contact || '');
-      setReceiverAddress(req.receiver_address || '');
-      setItemType(req.item_type || '');
-      setWeight(req.weight || '');
-      setWeightUnit('kg');
-      setQuantity(req.quantity || '');
-      setIsFragile(req.is_fragile || false);
-      setSpecialInstructions(req.special_instructions || '');
-      if (req.preferred_payment_method) setPaymentMethod(req.preferred_payment_method);
-    }).catch(() => {});
   }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      // Re-read prefill every time screen is focused so a second request loads fresh data
+      AsyncStorage.getItem('prefill_delivery_request').then(raw => {
+        if (!raw) {
+          setActiveRequestId(null);
+          return;
+        }
+        const req = JSON.parse(raw);
+        setActiveRequestId(req.id ?? null);
+        // Reset all fields before applying new prefill to avoid stale data from previous request
+        setSenderName(req.sender_name || '');
+        setSenderContact(req.sender_contact || '');
+        setSenderAddress(req.sender_address || '');
+        setReceiverName(req.receiver_name || '');
+        setReceiverContact(req.receiver_contact || '');
+        setReceiverAddress(req.receiver_address || '');
+        setItemType(req.item_type || '');
+        setWeight(req.weight || '');
+        setWeightUnit('kg');
+        setQuantity(req.quantity || '');
+        setIsFragile(req.is_fragile || false);
+        setSpecialInstructions(req.special_instructions || '');
+        if (req.preferred_payment_method) setPaymentMethod(req.preferred_payment_method);
+        setDeliveryFee('');
+        setAmountTendered('');
+        setDigitalConfirmed(false);
+        setDigitalAmountReceived('');
+        setDigitalRefNumber('');
+        setSenderLat(null); setSenderLng(null);
+        setReceiverLat(null); setReceiverLng(null);
+        setSenderContactLinked(null);
+        setLinkedCustomerName(null);
+        setNearestHub(null);
+      }).catch(() => {});
+    }, [])
+  );
 
   const UNIT_TO_KG: Record<string, number> = { kg: 1, g: 0.001, lbs: 0.453592, oz: 0.0283495 };
   const weightInKg = (parseFloat(weight) || 0) * (UNIT_TO_KG[weightUnit] ?? 1);
@@ -183,6 +205,9 @@ export default function CashierCreateDelivery() {
         formData.append('sender_latitude', senderLat.toString());
         formData.append('sender_longitude', senderLng.toString());
       }
+      if (activeRequestId) {
+        formData.append('delivery_request_id', activeRequestId.toString());
+      }
       formData.append('package_details', `${itemType} - ${weightInKg.toFixed(3)}kg - Qty: ${quantity}${isFragile ? ' [FRAGILE]' : ''}`);
       formData.append('delivery_fee', deliveryFee);
       formData.append('pickup_option', 'branch');
@@ -193,13 +218,8 @@ export default function CashierCreateDelivery() {
       if (specialInstructions) formData.append('special_instructions', specialInstructions);
 
       const res = await deliveryAPI.createDelivery(formData);
-      // Mark the delivery request as accepted and clear prefill
-      const raw = await AsyncStorage.getItem('prefill_delivery_request');
-      if (raw) {
-        const req = JSON.parse(raw);
-        await deliveryAPI.acceptDeliveryRequest(req.id).catch(() => {});
-        await AsyncStorage.removeItem('prefill_delivery_request');
-      }
+      await AsyncStorage.removeItem('prefill_delivery_request');
+      setActiveRequestId(null);
       setWaybill({
         tracking_number: res.data.tracking_number,
         sender_name: senderName,
@@ -223,13 +243,23 @@ export default function CashierCreateDelivery() {
         hub_address: cashierBranch?.address || null,
       });
     } catch (error: any) {
-      Alert.alert('Error', error.response?.data?.detail || 'Failed to create delivery');
+      const responseData = error.response?.data;
+      const message =
+        responseData?.detail ||
+        responseData?.error ||
+        (typeof responseData === 'object'
+          ? Object.values(responseData).flat().join('\n')
+          : null) ||
+        'Failed to create delivery';
+      Alert.alert('Error', message);
     } finally {
       setLoading(false);
     }
   };
 
   const handleNewParcel = () => {
+    void AsyncStorage.removeItem('prefill_delivery_request');
+    setActiveRequestId(null);
     setWaybill(null);
     setSenderName(''); setSenderContact(''); setSenderAddress('');
     setReceiverName(''); setReceiverContact(''); setReceiverAddress('');
@@ -410,6 +440,7 @@ export default function CashierCreateDelivery() {
         ) : (
           <View style={styles.hubBannerWarn}>
             <Text style={styles.hubBannerWarnText}>⚠️ No hub assigned — ask admin to assign you to a branch</Text>
+            <Text style={styles.hubBannerWarnSub}>You cannot accept parcels until a hub is assigned to your account.</Text>
           </View>
         )}
 
@@ -633,9 +664,9 @@ export default function CashierCreateDelivery() {
         />
 
         <TouchableOpacity
-          style={[styles.submitBtn, loading && styles.submitBtnDisabled]}
+          style={[styles.submitBtn, (loading || !cashierBranch) && styles.submitBtnDisabled]}
           onPress={handleSubmit}
-          disabled={loading}
+          disabled={loading || !cashierBranch}
         >
           <Text style={styles.submitBtnText}>
             {loading ? 'Processing...' : '✅ Collect Payment & Generate Waybill'}
@@ -732,6 +763,7 @@ const styles = StyleSheet.create({
   hubBannerAddr: { fontSize: 12, color: '#555' },
   hubBannerWarn: { backgroundColor: '#FFF3E0', borderRadius: 12, padding: 14, marginBottom: 16, borderWidth: 1, borderColor: '#FF9800' },
   hubBannerWarnText: { fontSize: 13, color: '#E65100', fontWeight: '600', textAlign: 'center' },
+  hubBannerWarnSub: { fontSize: 12, color: '#BF360C', textAlign: 'center', marginTop: 4 },
   waybillHubBox: { backgroundColor: '#E3F2FD', borderRadius: 8, padding: 10, marginTop: 8, borderWidth: 1, borderColor: '#1565C0' },
   waybillHubLabel: { fontSize: 10, fontWeight: '700', color: '#1565C0', textTransform: 'uppercase', marginBottom: 3 },
   waybillHubName: { fontSize: 14, fontWeight: 'bold', color: '#0D47A1', marginBottom: 1 },
