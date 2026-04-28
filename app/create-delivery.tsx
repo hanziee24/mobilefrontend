@@ -148,8 +148,22 @@ export default function CreateDelivery() {
   };
 
   const handleSendToCashier = async () => {
-    if (!senderName || !senderContact || !receiverName || !receiverContact || !receiverAddress || !itemType || !weight || !quantity) {
+    if (
+      !senderName.trim() ||
+      !senderContact.trim() ||
+      !senderAddress.trim() ||
+      !receiverName.trim() ||
+      !receiverContact.trim() ||
+      !receiverAddress.trim() ||
+      !itemType.trim() ||
+      !weight.trim() ||
+      !quantity.trim()
+    ) {
       Alert.alert('Missing Fields', 'Please fill in all required fields marked with *');
+      return;
+    }
+    if (weightInKg <= 0 || (parseInt(quantity, 10) || 0) <= 0) {
+      Alert.alert('Invalid Parcel Details', 'Weight and quantity must be greater than 0.');
       return;
     }
     setLoading(true);
@@ -192,8 +206,17 @@ export default function CreateDelivery() {
       const res = await deliveryAPI.createDeliveryRequest(formData);
       setTrackingHint(String(res?.data?.id || res?.data?.tracking_number || ''));
       setSubmitted(true);
-    } catch {
-      Alert.alert('Error', 'Failed to send request to cashier. Please try again.');
+    } catch (error: any) {
+      const responseData = error?.response?.data;
+      const message =
+        responseData?.detail ||
+        responseData?.error ||
+        (typeof responseData === 'object'
+          ? Object.values(responseData).flat().join('\n')
+          : null) ||
+        error?.message ||
+        'Failed to send request to cashier. Please try again.';
+      Alert.alert('Error', message);
     } finally {
       setLoading(false);
     }
@@ -271,7 +294,7 @@ export default function CreateDelivery() {
         <Text style={styles.label}>Contact Number *</Text>
         <TextInput style={styles.input} placeholder="09XXXXXXXXX" value={senderContact} onChangeText={setSenderContact} keyboardType="phone-pad" placeholderTextColor="#999" />
 
-        <Text style={styles.label}>Address</Text>
+        <Text style={styles.label}>Address *</Text>
         <View style={styles.addressRow}>
           <TextInput
             style={[styles.input, { flex: 1 }]}

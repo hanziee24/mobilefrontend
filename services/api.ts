@@ -37,6 +37,49 @@ const clearAuthStorage = async () => {
 const isPublicAuthRequest = (url?: string) =>
   PUBLIC_AUTH_PATHS.some((path) => (url || '').includes(path));
 
+const parseFetchResponse = async (response: Response) => {
+  const raw = await response.text();
+  if (!raw) return {};
+
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return { detail: raw };
+  }
+};
+
+const postMultipartWithFetchFallback = async (path: string, formData: FormData) => {
+  try {
+    return await api.post(path, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+  } catch (error: any) {
+    const isNetworkFailure = error?.message === 'Network Error' || error?.code === 'ECONNABORTED';
+    if (!isNetworkFailure) throw error;
+
+    const token = await AsyncStorage.getItem(ACCESS_TOKEN_KEY);
+    const response = await fetch(`${API_URL}${path}`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      body: formData,
+    });
+
+    const data = await parseFetchResponse(response);
+
+    if (!response.ok) {
+      const fetchError: any = new Error(
+        data?.error || data?.detail || data?.message || 'Request failed'
+      );
+      fetchError.response = { status: response.status, data };
+      throw fetchError;
+    }
+
+    return { status: response.status, data };
+  }
+};
+
 const refreshAccessToken = async () => {
   if (!refreshTokenRequest) {
     refreshTokenRequest = (async () => {
@@ -122,44 +165,7 @@ api.interceptors.response.use(
 );
 
 export const authAPI = {
-  register: async (formData: FormData) => {
-    try {
-      return await api.post('/auth/register/', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
-    } catch (error: any) {
-      const isNetworkFailure = error?.message === 'Network Error' || error?.code === 'ECONNABORTED';
-      if (!isNetworkFailure) throw error;
-
-      // Fallback to fetch for devices that fail axios multipart uploads.
-      const response = await fetch(`${API_URL}/auth/register/`, {
-        method: 'POST',
-        body: formData,
-      });
-
-      const raw = await response.text();
-      let data: any = {};
-      if (raw) {
-        try {
-          data = JSON.parse(raw);
-        } catch {
-          data = { detail: raw };
-        }
-      }
-
-      if (!response.ok) {
-        const fetchError: any = new Error(
-          data?.error || data?.detail || data?.message || 'Registration failed'
-        );
-        fetchError.response = { status: response.status, data };
-        throw fetchError;
-      }
-
-      return { status: response.status, data };
-    }
-  },
+  register: (formData: FormData) => postMultipartWithFetchFallback('/auth/register/', formData),
   verifyEmail: (email: string, code: string) => api.post('/auth/verify-email/', { email, code }),
   resendVerification: (email: string) => api.post('/auth/resend-verification/', { email }),
   
@@ -274,11 +280,7 @@ export const deliveryAPI = {
   getDelivery: (id: number) => api.get(`/deliveries/${id}/`),
   getRiders: () => api.get('/auth/riders/'),
   getAllRiders: () => api.get('/auth/all-riders/'),
-  createDelivery: async (formData: FormData) => {
-    return api.post('/deliveries/', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    });
-  },
+  createDelivery: (formData: FormData) => postMultipartWithFetchFallback('/deliveries/', formData),
   updateDelivery: (id: number, data: any) => api.patch(`/deliveries/${id}/`, data),
   updateStatus: (id: number, status: string) => api.post(`/deliveries/${id}/update_status/`, { status }),
   cancelDelivery: (id: number) => api.post(`/deliveries/${id}/cancel/`),
@@ -297,11 +299,10 @@ export const deliveryAPI = {
     api.patch('/auth/profile/', { current_latitude: latitude, current_longitude: longitude }),
   createDeliveryRequest: (data: any) => {
     const isMultipart = typeof FormData !== 'undefined' && data instanceof FormData;
-    return api.post(
-      '/delivery-requests/create/',
-      data,
-      isMultipart ? { headers: { 'Content-Type': 'multipart/form-data' } } : undefined
-    );
+    if (isMultipart) {
+      return postMultipartWithFetchFallback('/delivery-requests/create/', data);
+    }
+    return api.post('/delivery-requests/create/', data);
   },
   getDeliveryRequests: () => api.get('/delivery-requests/'),
   acceptDeliveryRequest: (id: number) => api.post(`/delivery-requests/${id}/accept/`),

@@ -11,7 +11,8 @@ interface Transaction {
   balance_after: string;
   description: string;
   created_at: string;
-  delivery?: { tracking_number: string };
+  delivery?: { id: number; tracking_number: string } | null;
+  delivery_tracking?: string | null;
 }
 
 export default function EarningsTracker() {
@@ -131,7 +132,9 @@ export default function EarningsTracker() {
                     <View style={styles.txIconWrap}>{getTxIcon(tx.transaction_type)}</View>
                     <View>
                       <Text style={styles.txDesc}>{tx.description}</Text>
-                      {tx.delivery && <Text style={styles.txTracking}>#{tx.delivery.tracking_number}</Text>}
+                      {(tx.delivery?.tracking_number || tx.delivery_tracking) ? (
+                        <Text style={styles.txTracking}>#{tx.delivery?.tracking_number || tx.delivery_tracking}</Text>
+                      ) : null}
                       <View style={styles.txDateRow}>
                         <Clock3 size={11} color="#999" strokeWidth={2.2} />
                         <Text style={styles.txDate}>{new Date(tx.created_at).toLocaleString()}</Text>

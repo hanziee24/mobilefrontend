@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Image, ScrollView } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { deliveryAPI, paymentAPI, authAPI, API_URL } from '../services/api';
+import { deliveryAPI, paymentAPI, authAPI } from '../services/api';
+import { resolveMediaUrl } from '../utils/media';
 
 export default function RiderPOS() {
   const { id, next } = useLocalSearchParams<{ id: string; next?: string }>();
@@ -16,6 +17,7 @@ export default function RiderPOS() {
   const [uploadingProof, setUploadingProof] = useState(false);
   const [riderProfile, setRiderProfile] = useState<any>(null);
   const continueToProof = next === 'proof';
+  const riderGcashQrUrl = resolveMediaUrl(riderProfile?.gcash_qr);
 
   useEffect(() => {
     authAPI.getProfile().then(res => setRiderProfile(res.data)).catch(() => {});
@@ -124,11 +126,11 @@ export default function RiderPOS() {
           </View>
         </View>
 
-        {riderProfile?.gcash_qr && (
+        {riderGcashQrUrl && (
           <View style={styles.receiptCard}>
             <Text style={[styles.receiptLabel, { textAlign: 'center', marginBottom: 10 }]}>Your GCash QR Code</Text>
             <Image
-              source={{ uri: `${API_URL.replace('/api', '')}${riderProfile.gcash_qr}` }}
+              source={{ uri: riderGcashQrUrl }}
               style={styles.qrImage}
               resizeMode="contain"
             />
