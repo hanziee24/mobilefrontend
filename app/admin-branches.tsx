@@ -1,14 +1,41 @@
-import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Modal, TextInput, Platform } from 'react-native';
+import { useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { router } from 'expo-router';
-import { authAPI } from '../services/api';
-import MapPicker from '../components/MapPicker';
 import { isAxiosError } from 'axios';
-import MapView, { Marker, Callout } from 'react-native-maps';
+import { WebView } from 'react-native-webview';
 
-type Branch = { id: number; name: string; address: string; latitude?: number; longitude?: number; is_active: boolean };
+import MapPicker from '../components/MapPicker';
+import { authAPI } from '../services/api';
+
+type Branch = {
+  id: number;
+  name: string;
+  address: string;
+  latitude?: number;
+  longitude?: number;
+  is_active: boolean;
+};
+
+const DEFAULT_LATITUDE = 10.3157;
+const DEFAULT_LONGITUDE = 123.8854;
 
 const to6dp = (value: number) => Number(value.toFixed(6));
+
+const isFiniteCoordinate = (value: unknown): value is number => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed);
+};
 
 const getAxiosErrorMessage = (error: any) => {
   if (!isAxiosError(error)) return null;
@@ -46,7 +73,9 @@ export default function AdminBranches() {
   const [showMapPicker, setShowMapPicker] = useState(false);
   const [mapView, setMapView] = useState<'list' | 'map'>('list');
 
-  useEffect(() => { fetchBranches(); }, []);
+  useEffect(() => {
+    fetchBranches();
+  }, []);
 
   const fetchBranches = async () => {
     try {
@@ -58,27 +87,40 @@ export default function AdminBranches() {
       } else {
         Alert.alert('Error', 'Failed to load branches');
       }
+    } finally {
+      setLoading(false);
     }
-    finally { setLoading(false); }
   };
 
   const openCreate = () => {
     setEditing(null);
-    setName(''); setAddress(''); setLatitude(undefined); setLongitude(undefined);
+    setName('');
+    setAddress('');
+    setLatitude(undefined);
+    setLongitude(undefined);
     setShowForm(true);
   };
 
-  const openEdit = (b: Branch) => {
-    setEditing(b);
-    setName(b.name); setAddress(b.address);
-    setLatitude(b.latitude ? Number(b.latitude) : undefined);
-    setLongitude(b.longitude ? Number(b.longitude) : undefined);
+  const openEdit = (branch: Branch) => {
+    setEditing(branch);
+    setName(branch.name);
+    setAddress(branch.address);
+    setLatitude(isFiniteCoordinate(branch.latitude) ? Number(branch.latitude) : undefined);
+    setLongitude(isFiniteCoordinate(branch.longitude) ? Number(branch.longitude) : undefined);
     setShowForm(true);
   };
 
   const handleSave = async () => {
-    if (!name.trim()) { Alert.alert('Required', 'Branch name is required'); return; }
-    if (!address.trim()) { Alert.alert('Required', 'Address is required'); return; }
+    if (!name.trim()) {
+      Alert.alert('Required', 'Branch name is required');
+      return;
+    }
+
+    if (!address.trim()) {
+      Alert.alert('Required', 'Address is required');
+      return;
+    }
+
     setSaving(true);
     try {
       const payload: { name: string; address: string; latitude?: number; longitude?: number } = {
@@ -97,6 +139,7 @@ export default function AdminBranches() {
       } else {
         await authAPI.createBranch(payload);
       }
+
       setShowForm(false);
       fetchBranches();
     } catch (error) {
@@ -113,29 +156,36 @@ export default function AdminBranches() {
       } else {
         Alert.alert('Error', 'Failed to save branch');
       }
+    } finally {
+      setSaving(false);
     }
-    finally { setSaving(false); }
   };
 
-  const handleDelete = (b: Branch) => {
-    Alert.alert('Deactivate Branch', `Deactivate "${b.name}"? Riders assigned to it will become unassigned.`, [
+  const handleDelete = (branch: Branch) => {
+    Alert.alert('Deactivate Branch', `Deactivate "${branch.name}"? Riders assigned to it will become unassigned.`, [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Deactivate', style: 'destructive', onPress: async () => {
-        try {
-          await authAPI.deleteBranch(b.id);
-          fetchBranches();
-        } catch { Alert.alert('Error', 'Failed to deactivate branch'); }
-      }},
+      {
+        text: 'Deactivate',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await authAPI.deleteBranch(branch.id);
+            fetchBranches();
+          } catch {
+            Alert.alert('Error', 'Failed to deactivate branch');
+          }
+        },
+      },
     ]);
   };
 
-  const pinnedBranches = branches.filter(b => b.latitude && b.longitude);
+  const pinnedBranches = branches.filter(branch => isFiniteCoordinate(branch.latitude) && isFiniteCoordinate(branch.longitude));
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.backBtn}>←</Text>
+          <Text style={styles.backBtn}>Back</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Manage Hubs</Text>
         <TouchableOpacity style={styles.addBtn} onPress={openCreate}>
@@ -143,13 +193,18 @@ export default function AdminBranches() {
         </TouchableOpacity>
       </View>
 
-      {/* Toggle */}
       <View style={styles.toggleRow}>
-        <TouchableOpacity style={[styles.toggleBtn, mapView === 'list' && styles.toggleActive]} onPress={() => setMapView('list')}>
-          <Text style={[styles.toggleText, mapView === 'list' && styles.toggleTextActive]}>📋 List</Text>
+        <TouchableOpacity
+          style={[styles.toggleBtn, mapView === 'list' && styles.toggleActive]}
+          onPress={() => setMapView('list')}
+        >
+          <Text style={[styles.toggleText, mapView === 'list' && styles.toggleTextActive]}>List</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.toggleBtn, mapView === 'map' && styles.toggleActive]} onPress={() => setMapView('map')}>
-          <Text style={[styles.toggleText, mapView === 'map' && styles.toggleTextActive]}>🗺️ Map</Text>
+        <TouchableOpacity
+          style={[styles.toggleBtn, mapView === 'map' && styles.toggleActive]}
+          onPress={() => setMapView('map')}
+        >
+          <Text style={[styles.toggleText, mapView === 'map' && styles.toggleTextActive]}>Map</Text>
         </TouchableOpacity>
       </View>
 
@@ -161,63 +216,82 @@ export default function AdminBranches() {
         <ScrollView style={styles.content} contentContainerStyle={{ paddingBottom: 30 }}>
           {branches.length === 0 ? (
             <View style={styles.emptyState}>
-              <Text style={styles.emptyIcon}>🏢</Text>
+              <Text style={styles.emptyIcon}>Hub</Text>
               <Text style={styles.emptyText}>No hubs yet. Tap &quot;+ Add&quot; to create one.</Text>
             </View>
-          ) : branches.map(b => (
-            <View key={b.id} style={styles.card}>
-              <View style={styles.cardLeft}>
-                <View style={styles.hubIcon}><Text style={styles.hubIconText}>🏢</Text></View>
-                <View style={styles.cardInfo}>
-                  <Text style={styles.cardName}>{b.name}</Text>
-                  <Text style={styles.cardAddress}>{b.address}</Text>
-                  {b.latitude && b.longitude ? (
-                    <Text style={styles.cardCoords}>📍 {Number(b.latitude).toFixed(5)}, {Number(b.longitude).toFixed(5)}</Text>
-                  ) : (
-                    <Text style={styles.cardNoPin}>⚠️ No map pin set</Text>
-                  )}
+          ) : (
+            branches.map(branch => (
+              <View key={branch.id} style={styles.card}>
+                <View style={styles.cardLeft}>
+                  <View style={styles.hubIcon}>
+                    <Text style={styles.hubIconText}>H</Text>
+                  </View>
+                  <View style={styles.cardInfo}>
+                    <Text style={styles.cardName}>{branch.name}</Text>
+                    <Text style={styles.cardAddress}>{branch.address}</Text>
+                    {isFiniteCoordinate(branch.latitude) && isFiniteCoordinate(branch.longitude) ? (
+                      <Text style={styles.cardCoords}>
+                        Pin: {Number(branch.latitude).toFixed(5)}, {Number(branch.longitude).toFixed(5)}
+                      </Text>
+                    ) : (
+                      <Text style={styles.cardNoPin}>No map pin set</Text>
+                    )}
+                  </View>
+                </View>
+                <View style={styles.cardActions}>
+                  <TouchableOpacity style={styles.editBtn} onPress={() => openEdit(branch)}>
+                    <Text style={styles.editBtnText}>Edit</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDelete(branch)}>
+                    <Text style={styles.deleteBtnText}>Remove</Text>
+                  </TouchableOpacity>
                 </View>
               </View>
-              <View style={styles.cardActions}>
-                <TouchableOpacity style={styles.editBtn} onPress={() => openEdit(b)}>
-                  <Text style={styles.editBtnText}>Edit</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDelete(b)}>
-                  <Text style={styles.deleteBtnText}>Remove</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          ))}
+            ))
+          )}
         </ScrollView>
       )}
 
-      {/* Create / Edit Form Modal */}
       <Modal visible={showForm} animationType="slide" transparent onRequestClose={() => setShowForm(false)}>
         <View style={styles.formOverlay}>
           <View style={styles.formCard}>
             <View style={styles.formHeader}>
               <Text style={styles.formTitle}>{editing ? 'Edit Hub' : 'New Hub'}</Text>
               <TouchableOpacity onPress={() => setShowForm(false)}>
-                <Text style={styles.formClose}>✕</Text>
+                <Text style={styles.formClose}>X</Text>
               </TouchableOpacity>
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false}>
               <Text style={styles.fieldLabel}>Hub Name *</Text>
-              <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="e.g. JRNZ Cebu Main Hub" placeholderTextColor="#aaa" />
+              <TextInput
+                style={styles.input}
+                value={name}
+                onChangeText={setName}
+                placeholder="e.g. JRNZ Cebu Main Hub"
+                placeholderTextColor="#aaa"
+              />
 
               <Text style={styles.fieldLabel}>Address *</Text>
-              <TextInput style={[styles.input, { minHeight: 70 }]} value={address} onChangeText={setAddress} placeholder="Full address" placeholderTextColor="#aaa" multiline textAlignVertical="top" />
+              <TextInput
+                style={[styles.input, { minHeight: 70 }]}
+                value={address}
+                onChangeText={setAddress}
+                placeholder="Full address"
+                placeholderTextColor="#aaa"
+                multiline
+                textAlignVertical="top"
+              />
 
               <Text style={styles.fieldLabel}>Map Location</Text>
               <TouchableOpacity style={styles.mapPickerBtn} onPress={() => setShowMapPicker(true)}>
-                {latitude && longitude ? (
+                {Number.isFinite(latitude) && Number.isFinite(longitude) ? (
                   <View>
-                    <Text style={styles.mapPickerBtnText}>📍 Location pinned</Text>
-                    <Text style={styles.mapPickerCoords}>{latitude.toFixed(5)}, {longitude.toFixed(5)}</Text>
+                    <Text style={styles.mapPickerBtnText}>Location pinned</Text>
+                    <Text style={styles.mapPickerCoords}>{latitude?.toFixed(5)}, {longitude?.toFixed(5)}</Text>
                   </View>
                 ) : (
-                  <Text style={styles.mapPickerBtnText}>🗺️ Tap to pin on map</Text>
+                  <Text style={styles.mapPickerBtnText}>Tap to pin on map</Text>
                 )}
               </TouchableOpacity>
 
@@ -232,10 +306,10 @@ export default function AdminBranches() {
       <MapPicker
         visible={showMapPicker}
         onClose={() => setShowMapPicker(false)}
-        onSelectLocation={(addr, lat, lng) => {
-          if (!address.trim()) setAddress(addr);
-          setLatitude(lat);
-          setLongitude(lng);
+        onSelectLocation={(selectedAddress, selectedLatitude, selectedLongitude) => {
+          if (!address.trim()) setAddress(selectedAddress);
+          setLatitude(selectedLatitude);
+          setLongitude(selectedLongitude);
           setShowMapPicker(false);
         }}
         initialAddress={address}
@@ -244,38 +318,124 @@ export default function AdminBranches() {
   );
 }
 
-function HubMapView({ branches, onEditBranch }: { branches: Branch[]; onEditBranch: (b: Branch) => void }) {
+function HubMapView({ branches, onEditBranch }: { branches: Branch[]; onEditBranch: (branch: Branch) => void }) {
   if (Platform.OS === 'web') {
     return (
       <View style={styles.webFallback}>
-        <Text style={styles.webFallbackText}>🗺️ Map view is only available on mobile.</Text>
+        <Text style={styles.webFallbackText}>Map view is only available on mobile.</Text>
       </View>
     );
   }
 
-  const initialRegion = branches.length > 0 && branches[0].latitude && branches[0].longitude
-    ? { latitude: Number(branches[0].latitude), longitude: Number(branches[0].longitude), latitudeDelta: 0.15, longitudeDelta: 0.15 }
-    : { latitude: 10.3157, longitude: 123.8854, latitudeDelta: 0.15, longitudeDelta: 0.15 };
+  const normalizedBranches = branches
+    .filter(branch => isFiniteCoordinate(branch.latitude) && isFiniteCoordinate(branch.longitude))
+    .map(branch => ({
+      ...branch,
+      latitude: Number(branch.latitude),
+      longitude: Number(branch.longitude),
+    }));
+
+  const firstPinnedBranch = normalizedBranches[0];
+  const initialLatitude = firstPinnedBranch?.latitude ?? DEFAULT_LATITUDE;
+  const initialLongitude = firstPinnedBranch?.longitude ?? DEFAULT_LONGITUDE;
+  const serializedBranches = JSON.stringify(normalizedBranches).replace(/</g, '\\u003c');
+
+  const handleWebViewMessage = (event: any) => {
+    try {
+      const data = JSON.parse(event.nativeEvent.data);
+      if (data?.type !== 'edit' || data?.id == null) return;
+
+      const selectedBranch = branches.find(branch => branch.id === data.id);
+      if (selectedBranch) {
+        onEditBranch(selectedBranch);
+      }
+    } catch {}
+  };
+
+  const leafletHTML = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body, #map { width: 100%; height: 100%; background: #f5f5f5; }
+    .hub-popup { min-width: 180px; }
+    .hub-name { font-size: 14px; font-weight: 700; color: #333; margin-bottom: 4px; }
+    .hub-address { font-size: 12px; color: #666; margin-bottom: 8px; }
+    .hub-link {
+      display: inline-block;
+      padding: 7px 10px;
+      border-radius: 8px;
+      background: #ED1C24;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 600;
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <script>
+    var branches = ${serializedBranches};
+    var map = L.map('map').setView([${initialLatitude}, ${initialLongitude}], 13);
+
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: 'OpenStreetMap'
+    }).addTo(map);
+
+    var bounds = [];
+
+    function escapeHtml(value) {
+      return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    branches.forEach(function(branch) {
+      var coords = [branch.latitude, branch.longitude];
+      bounds.push(coords);
+
+      var marker = L.marker(coords).addTo(map);
+      var popupHtml =
+        '<div class="hub-popup">' +
+        '<div class="hub-name">' + escapeHtml(branch.name) + '</div>' +
+        '<div class="hub-address">' + escapeHtml(branch.address) + '</div>' +
+        '<a class="hub-link" href="#" onclick="window.handleEdit(' + branch.id + '); return false;">Edit Hub</a>' +
+        '</div>';
+
+      marker.bindPopup(popupHtml);
+    });
+
+    if (bounds.length > 1) {
+      map.fitBounds(bounds, { padding: [30, 30] });
+    }
+
+    window.handleEdit = function(id) {
+      window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'edit', id: id }));
+    };
+  </script>
+</body>
+</html>
+  `;
 
   return (
     <View style={{ flex: 1 }}>
-      <MapView style={{ flex: 1 }} initialRegion={initialRegion}>
-        {branches.map(b => (
-          <Marker
-            key={b.id}
-            coordinate={{ latitude: Number(b.latitude), longitude: Number(b.longitude) }}
-            pinColor="#ED1C24"
-          >
-            <Callout onPress={() => onEditBranch(b)}>
-              <View style={styles.callout}>
-                <Text style={styles.calloutName}>🏢 {b.name}</Text>
-                <Text style={styles.calloutAddress}>{b.address}</Text>
-                <Text style={styles.calloutEdit}>Tap to edit →</Text>
-              </View>
-            </Callout>
-          </Marker>
-        ))}
-      </MapView>
+      <WebView
+        style={{ flex: 1 }}
+        source={{ html: leafletHTML }}
+        onMessage={handleWebViewMessage}
+        javaScriptEnabled
+        domStorageEnabled
+        originWhitelist={['*']}
+      />
       {branches.length === 0 && (
         <View style={styles.mapEmptyOverlay}>
           <Text style={styles.mapEmptyText}>No hubs with map pins yet.</Text>
@@ -288,24 +448,56 @@ function HubMapView({ branches, onEditBranch }: { branches: Branch[]; onEditBran
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f5f5' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 15, paddingTop: 50, paddingBottom: 15, backgroundColor: '#ED1C24' },
-  backBtn: { fontSize: 28, color: '#fff' },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 15,
+    paddingTop: 50,
+    paddingBottom: 15,
+    backgroundColor: '#ED1C24',
+  },
+  backBtn: { fontSize: 16, color: '#fff', fontWeight: '700' },
   title: { fontSize: 20, fontWeight: 'bold', color: '#fff' },
   addBtn: { backgroundColor: 'rgba(255,255,255,0.25)', paddingHorizontal: 14, paddingVertical: 7, borderRadius: 10 },
   addBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
   toggleRow: { flexDirection: 'row', margin: 12, backgroundColor: '#e0e0e0', borderRadius: 12, padding: 3 },
   toggleBtn: { flex: 1, paddingVertical: 9, alignItems: 'center', borderRadius: 10 },
-  toggleActive: { backgroundColor: '#fff', elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 3 },
+  toggleActive: {
+    backgroundColor: '#fff',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+  },
   toggleText: { fontSize: 13, fontWeight: '600', color: '#888' },
   toggleTextActive: { color: '#ED1C24' },
   content: { flex: 1, paddingHorizontal: 12 },
   emptyState: { alignItems: 'center', paddingTop: 80 },
-  emptyIcon: { fontSize: 52, marginBottom: 12 },
+  emptyIcon: { fontSize: 30, fontWeight: '700', marginBottom: 12, color: '#ED1C24' },
   emptyText: { fontSize: 14, color: '#999', textAlign: 'center' },
-  card: { backgroundColor: '#fff', borderRadius: 14, padding: 14, marginBottom: 10, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 4 },
+  card: {
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 10,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+  },
   cardLeft: { flexDirection: 'row', gap: 12, marginBottom: 10 },
-  hubIcon: { width: 44, height: 44, borderRadius: 12, backgroundColor: '#FFEBEE', justifyContent: 'center', alignItems: 'center' },
-  hubIconText: { fontSize: 22 },
+  hubIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#FFEBEE',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  hubIconText: { fontSize: 22, color: '#ED1C24', fontWeight: '800' },
   cardInfo: { flex: 1 },
   cardName: { fontSize: 15, fontWeight: '700', color: '#333', marginBottom: 3 },
   cardAddress: { fontSize: 12, color: '#666', marginBottom: 3 },
@@ -328,12 +520,17 @@ const styles = StyleSheet.create({
   mapPickerCoords: { fontSize: 11, color: '#4CAF50', marginTop: 4, textAlign: 'center' },
   saveBtn: { backgroundColor: '#ED1C24', padding: 15, borderRadius: 14, alignItems: 'center', marginTop: 20, marginBottom: 10 },
   saveBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
-  callout: { padding: 10, minWidth: 180 },
-  calloutName: { fontSize: 14, fontWeight: '700', color: '#333', marginBottom: 4 },
-  calloutAddress: { fontSize: 12, color: '#666', marginBottom: 6 },
-  calloutEdit: { fontSize: 12, color: '#ED1C24', fontWeight: '600' },
   webFallback: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 30 },
   webFallbackText: { fontSize: 15, color: '#888', textAlign: 'center' },
-  mapEmptyOverlay: { position: 'absolute', bottom: 30, left: 20, right: 20, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 12, padding: 16, alignItems: 'center' },
+  mapEmptyOverlay: {
+    position: 'absolute',
+    bottom: 30,
+    left: 20,
+    right: 20,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+  },
   mapEmptyText: { color: '#fff', fontSize: 13, textAlign: 'center', marginBottom: 2 },
 });
