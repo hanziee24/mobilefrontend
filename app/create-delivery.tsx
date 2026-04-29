@@ -27,6 +27,13 @@ const FLOW_STEPS = [
   { step: 3, label: 'Rider Picks Up', desc: 'Delivery starts' },
 ];
 
+interface NearbyHub {
+  id: number;
+  name: string;
+  address: string;
+  distance_km: number;
+}
+
 const formatAddressLabel = (value: string) => value.split('|')[0]?.trim() || value;
 
 const extractCoordinatesFromAddress = (value: string) => {
@@ -67,6 +74,17 @@ const geocodeAddressLabel = async (value: string) => {
   }
 };
 
+const resolveAddressWithCoordinates = async (value: string) => {
+  const label = formatAddressLabel(value).trim();
+  if (!label) return { address: '', coords: null as { lat: number; lng: number } | null };
+
+  const coords = extractCoordinatesFromAddress(value) || await geocodeAddressLabel(value);
+  return {
+    address: coords ? `${label}|${coords.lat},${coords.lng}` : label,
+    coords,
+  };
+};
+
 function FlowIndicator() {
   return (
     <View style={flowStyles.container}>
@@ -94,6 +112,7 @@ function FlowIndicator() {
 export default function CreateDelivery() {
   const [submitted, setSubmitted] = useState(false);
   const [trackingHint, setTrackingHint] = useState('');
+  const [selectedHubName, setSelectedHubName] = useState('');
   const [senderName, setSenderName] = useState('');
   const [senderAddress, setSenderAddress] = useState('');
   const [senderContact, setSenderContact] = useState('');
@@ -112,11 +131,24 @@ export default function CreateDelivery() {
   const [feeConfig, setFeeConfig] = useState({ base_fee: 50, per_kg_rate: 15, per_item_rate: 10 });
   const [showMapPicker, setShowMapPicker] = useState(false);
   const [mapPickerType, setMapPickerType] = useState<'sender' | 'receiver'>('sender');
+  const [nearbyHubs, setNearbyHubs] = useState<NearbyHub[]>([]);
+  const [selectedHubId, setSelectedHubId] = useState<number | null>(null);
+  const [loadingNearbyHubs, setLoadingNearbyHubs] = useState(false);
 
   useEffect(() => {
     authAPI.validateToken().then(valid => {
       if (!valid) Alert.alert('Session Expired', 'Please login again', [{ text: 'OK', onPress: () => router.replace('/auth') }]);
     });
+    authAPI.getProfile().then((res) => {
+      const profile = res.data;
+      const fullName = `${profile.first_name || ''} ${profile.last_name || ''}`.trim();
+      if (fullName) setSenderName((current) => current || fullName);
+      if (profile.phone) setSenderContact((current: string) => current || profile.phone);
+      if (profile.address) {
+        setSenderAddress((current: string) => current || profile.address);
+        void loadNearbyHubsForAddress(profile.address);
+      }
+    }).catch(() => {});
     settingsAPI.getFeeConfig().then(res => {
       setFeeConfig({
         base_fee: parseFloat(res.data.base_fee),
@@ -131,6 +163,38 @@ export default function CreateDelivery() {
   const estimatedFee = weight && quantity
     ? Math.ceil(feeConfig.base_fee + weightInKg * feeConfig.per_kg_rate + (parseInt(quantity) || 0) * feeConfig.per_item_rate)
     : null;
+
+  const loadNearbyHubsForAddress = async (value: string) => {
+    const label = formatAddressLabel(value).trim();
+    if (!label) {
+      setNearbyHubs([]);
+      setSelectedHubId(null);
+      return null;
+    }
+
+    setLoadingNearbyHubs(true);
+    try {
+      const resolved = await resolveAddressWithCoordinates(value);
+      if (!resolved.coords) {
+        setNearbyHubs([]);
+        setSelectedHubId(null);
+        return null;
+      }
+
+      setSenderAddress(resolved.address);
+      const res = await authAPI.getNearestHub(resolved.coords.lat, resolved.coords.lng);
+      const options = (res.data || []).slice(0, 3) as NearbyHub[];
+      setNearbyHubs(options);
+      setSelectedHubId((current) => (options.some((hub) => hub.id === current) ? current : options[0]?.id ?? null));
+      return options;
+    } catch {
+      setNearbyHubs([]);
+      setSelectedHubId(null);
+      return null;
+    } finally {
+      setLoadingNearbyHubs(false);
+    }
+  };
 
   const pickImage = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
@@ -168,16 +232,25 @@ export default function CreateDelivery() {
     }
     setLoading(true);
     try {
-      const receiverCoordinates =
-        extractCoordinatesFromAddress(receiverAddress) || await geocodeAddressLabel(receiverAddress);
-      const receiverAddressValue = receiverCoordinates
-        ? `${formatAddressLabel(receiverAddress)}|${receiverCoordinates.lat},${receiverCoordinates.lng}`
-        : receiverAddress;
-      const senderCoordinates =
-        extractCoordinatesFromAddress(senderAddress) || await geocodeAddressLabel(senderAddress);
-      const senderAddressValue = senderCoordinates
-        ? `${formatAddressLabel(senderAddress)}|${senderCoordinates.lat},${senderCoordinates.lng}`
-        : senderAddress;
+      const senderResolved = await resolveAddressWithCoordinates(senderAddress);
+      const receiverResolved = await resolveAddressWithCoordinates(receiverAddress);
+      const senderAddressValue = senderResolved.address;
+      const receiverAddressValue = receiverResolved.address;
+      const availableHubs = nearbyHubs.length > 0 ? nearbyHubs : (await loadNearbyHubsForAddress(senderAddressValue)) || [];
+      const hubId = selectedHubId ?? availableHubs[0]?.id ?? null;
+
+      if (!senderResolved.coords) {
+        Alert.alert('Sender Location Required', 'Please pin or confirm the sender location first so we can find the nearest hub.');
+        return;
+      }
+      if (!receiverResolved.coords) {
+        Alert.alert('Receiver Location Required', 'Please pin or confirm the delivery address on the map first.');
+        return;
+      }
+      if (!hubId) {
+        Alert.alert('Nearby Hub Required', 'Please load and choose a nearby hub for this parcel request.');
+        return;
+      }
 
       const formData = new FormData();
       formData.append('sender_name', senderName);
@@ -191,6 +264,7 @@ export default function CreateDelivery() {
       formData.append('quantity', quantity);
       formData.append('is_fragile', isFragile ? 'true' : 'false');
       formData.append('preferred_payment_method', preferredPayment);
+      formData.append('target_branch', String(hubId));
       if (specialInstructions.trim()) {
         formData.append('special_instructions', specialInstructions.trim());
       }
@@ -205,6 +279,7 @@ export default function CreateDelivery() {
 
       const res = await deliveryAPI.createDeliveryRequest(formData);
       setTrackingHint(String(res?.data?.id || res?.data?.tracking_number || ''));
+      setSelectedHubName(availableHubs.find((hub) => hub.id === hubId)?.name || res?.data?.target_branch_name || '');
       setSubmitted(true);
     } catch (error: any) {
       const responseData = error?.response?.data;
@@ -234,6 +309,12 @@ export default function CreateDelivery() {
           <CheckCircle size={72} color="#4CAF50" style={{ marginTop: 20, marginBottom: 16 }} />
           <Text style={styles.successTitle}>Delivery Request Submitted!</Text>
           <Text style={styles.successSub}>Your request has been sent to the cashier. Please proceed to the branch to pay and collect your waybill.</Text>
+          {selectedHubName ? (
+            <View style={styles.hubConfirmBox}>
+              <Text style={styles.hubConfirmLabel}>Selected Drop-off Hub</Text>
+              <Text style={styles.hubConfirmName}>{selectedHubName}</Text>
+            </View>
+          ) : null}
 
           <View style={styles.successSteps}>
             {[
@@ -300,13 +381,47 @@ export default function CreateDelivery() {
             style={[styles.input, { flex: 1 }]}
             placeholder="Enter sender address"
             value={formatAddressLabel(senderAddress)}
-            onChangeText={(value) => setSenderAddress((current) => updateAddressLabel(current, value))}
+            onChangeText={(value) => {
+              setSenderAddress(value);
+              setNearbyHubs([]);
+              setSelectedHubId(null);
+            }}
+            onEndEditing={() => { void loadNearbyHubsForAddress(senderAddress); }}
             placeholderTextColor="#999"
           />
           <TouchableOpacity style={styles.mapBtn} onPress={() => { setMapPickerType('sender'); setShowMapPicker(true); }}>
             <MapPin size={20} color="#fff" />
           </TouchableOpacity>
         </View>
+        <TouchableOpacity style={styles.findHubBtn} onPress={() => { void loadNearbyHubsForAddress(senderAddress); }} disabled={loadingNearbyHubs}>
+          <Text style={styles.findHubBtnText}>{loadingNearbyHubs ? 'Loading nearby hubs...' : 'Load Nearby Hubs'}</Text>
+        </TouchableOpacity>
+        <Text style={styles.hubHint}>Only cashiers assigned to your selected nearby hub will receive this request.</Text>
+        {nearbyHubs.length > 0 && (
+          <View style={styles.hubChooser}>
+            <Text style={styles.hubChooserTitle}>Choose a Nearby Hub</Text>
+            {nearbyHubs.map((hub, index) => {
+              const selected = selectedHubId === hub.id;
+              return (
+                <TouchableOpacity
+                  key={hub.id}
+                  style={[styles.hubOption, selected && styles.hubOptionActive]}
+                  onPress={() => setSelectedHubId(hub.id)}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.hubOptionName, selected && styles.hubOptionNameActive]}>
+                      {hub.name} {index === 0 ? '(Recommended)' : ''}
+                    </Text>
+                    <Text style={styles.hubOptionAddress}>{hub.address}</Text>
+                  </View>
+                  <Text style={[styles.hubOptionDistance, selected && styles.hubOptionDistanceActive]}>
+                    {hub.distance_km.toFixed(2)} km
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
 
         <View style={styles.sectionTitleRow}>
           <UserPlus size={17} color="#ED1C24" />
@@ -427,8 +542,12 @@ export default function CreateDelivery() {
         onClose={() => setShowMapPicker(false)}
         onSelectLocation={(address, lat, lng) => {
           const val = `${address}|${lat},${lng}`;
-          if (mapPickerType === 'sender') setSenderAddress(val);
-          else setReceiverAddress(val);
+          if (mapPickerType === 'sender') {
+            setSenderAddress(val);
+            void loadNearbyHubsForAddress(val);
+          } else {
+            setReceiverAddress(val);
+          }
           setShowMapPicker(false);
         }}
         initialAddress={mapPickerType === 'sender' ? senderAddress : receiverAddress}
@@ -469,6 +588,9 @@ const styles = StyleSheet.create({
   trackingBoxLabel: { fontSize: 11, color: '#E65100', fontWeight: '600', marginBottom: 4 },
   trackingBoxValue: { fontSize: 20, fontWeight: 'bold', color: '#E65100', letterSpacing: 1, marginBottom: 4 },
   trackingBoxNote: { fontSize: 11, color: '#E65100', textAlign: 'center' },
+  hubConfirmBox: { width: '100%', backgroundColor: '#E8F5E9', borderRadius: 12, padding: 14, marginBottom: 20, borderWidth: 1, borderColor: '#66BB6A', alignItems: 'center' },
+  hubConfirmLabel: { fontSize: 11, color: '#2E7D32', fontWeight: '700', marginBottom: 4, textTransform: 'uppercase' },
+  hubConfirmName: { fontSize: 17, fontWeight: '700', color: '#1B5E20', textAlign: 'center' },
   secondaryBtn: { backgroundColor: '#fff', padding: 14, borderRadius: 12, alignItems: 'center', marginTop: 10, borderWidth: 1, borderColor: '#ddd', width: '100%' },
   secondaryBtnText: { color: '#555', fontSize: 15, fontWeight: '600' },
   content: { flex: 1, padding: 15 },
@@ -481,6 +603,18 @@ const styles = StyleSheet.create({
   input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 10, padding: 13, backgroundColor: '#fff', fontSize: 15 },
   addressRow: { flexDirection: 'row', gap: 8 },
   mapBtn: { backgroundColor: '#4CAF50', width: 50, justifyContent: 'center', alignItems: 'center', borderRadius: 10 },
+  findHubBtn: { backgroundColor: '#1565C0', paddingVertical: 10, borderRadius: 10, alignItems: 'center', marginTop: 10 },
+  findHubBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  hubHint: { fontSize: 12, color: '#607D8B', marginTop: 8, lineHeight: 18 },
+  hubChooser: { backgroundColor: '#fff', borderRadius: 12, padding: 12, marginTop: 10, borderWidth: 1, borderColor: '#d9e2ec' },
+  hubChooserTitle: { fontSize: 13, fontWeight: '700', color: '#0D47A1', marginBottom: 10 },
+  hubOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 12, borderRadius: 10, borderWidth: 1, borderColor: '#d9e2ec', backgroundColor: '#F8FBFF', marginBottom: 8, gap: 10 },
+  hubOptionActive: { borderColor: '#1565C0', backgroundColor: '#E3F2FD' },
+  hubOptionName: { fontSize: 14, fontWeight: '700', color: '#1f2933', marginBottom: 3 },
+  hubOptionNameActive: { color: '#0D47A1' },
+  hubOptionAddress: { fontSize: 12, color: '#52606D' },
+  hubOptionDistance: { fontSize: 12, fontWeight: '700', color: '#486581' },
+  hubOptionDistanceActive: { color: '#1565C0' },
   row: { flexDirection: 'row' },
   unitSelector: { flexDirection: 'row', gap: 6, marginTop: 6 },
   unitBtn: { flex: 1, paddingVertical: 6, borderRadius: 6, borderWidth: 1, borderColor: '#ddd', alignItems: 'center', backgroundColor: '#fff' },
