@@ -48,6 +48,7 @@ export function resolveMediaUrl(value?: string | null): string | null {
     raw.startsWith('packages/') ||
     raw.startsWith('proof_of_delivery/') ||
     raw.startsWith('gcash_proofs/') ||
+    raw.startsWith('gcash_qr/') ||
     raw.startsWith('identity/') ||
     raw.startsWith('registrations/')
   ) {

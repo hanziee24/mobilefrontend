@@ -6,6 +6,7 @@ import api, { deliveryAPI, settingsAPI, authAPI } from '../services/api';
 import MapPicker from '../components/MapPicker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
+import { resolveMediaUrl } from '../utils/media';
 
 const formatAddressLabel = (value: string) => value.split('|')[0]?.trim() || value;
 
@@ -78,17 +79,25 @@ export default function CashierCreateDelivery() {
   const [cashierBranch, setCashierBranch] = useState<{ name: string; address: string } | null>(null);
   const [nearestHub, setNearestHub] = useState<{ name: string; address: string; distance_km: number } | null>(null);
 
-  useEffect(() => {
-    api.get('/auth/profile/').then(res => {
-      if (res.data.gcash_qr) setCashierGcashQr(res.data.gcash_qr);
+  const loadCashierProfile = useCallback(async () => {
+    try {
+      const res = await authAPI.getProfile();
+      setCashierGcashQr(resolveMediaUrl(res.data.gcash_qr));
       if (res.data.branch_name && res.data.branch_address) {
         setCashierBranch({ name: res.data.branch_name, address: res.data.branch_address });
+      } else {
+        setCashierBranch(null);
       }
-    }).catch(() => {});
+    } catch {}
   }, []);
+
+  useEffect(() => {
+    void loadCashierProfile();
+  }, [loadCashierProfile]);
 
   useFocusEffect(
     useCallback(() => {
+      void loadCashierProfile();
       // Re-read prefill every time screen is focused so a second request loads fresh data
       AsyncStorage.getItem('prefill_delivery_request').then(raw => {
         if (!raw) {
@@ -120,7 +129,7 @@ export default function CashierCreateDelivery() {
         setLinkedCustomerName(null);
         setNearestHub(null);
       }).catch(() => {});
-    }, [])
+    }, [loadCashierProfile])
   );
 
   const UNIT_TO_KG: Record<string, number> = { kg: 1, g: 0.001, lbs: 0.453592, oz: 0.0283495 };

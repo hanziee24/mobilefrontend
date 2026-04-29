@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { authAPI } from '../services/api';
+import { resolveMediaUrl } from '../utils/media';
 
 export default function CashierProfile() {
   const [user, setUser] = useState<any>(null);
@@ -85,6 +86,7 @@ export default function CashierProfile() {
   }
 
   const initials = `${user?.first_name?.[0] ?? ''}${user?.last_name?.[0] ?? ''}`.toUpperCase();
+  const gcashQrUrl = resolveMediaUrl(user?.gcash_qr);
 
   return (
     <View style={styles.container}>
@@ -129,9 +131,9 @@ export default function CashierProfile() {
         <Text style={styles.sectionSub}>This QR will be shown to customers when they pay via GCash at the branch.</Text>
 
         <View style={styles.qrCard}>
-          {user?.gcash_qr ? (
+          {gcashQrUrl ? (
             <>
-              <Image source={{ uri: user.gcash_qr }} style={styles.qrImage} resizeMode="contain" />
+              <Image source={{ uri: gcashQrUrl }} style={styles.qrImage} resizeMode="contain" />
               <View style={styles.qrActions}>
                 <TouchableOpacity style={styles.qrChangeBtn} onPress={handleUploadQr} disabled={uploading}>
                   <Text style={styles.qrChangeBtnText}>{uploading ? 'Uploading...' : '🔄 Change QR'}</Text>
