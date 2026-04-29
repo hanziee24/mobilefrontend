@@ -347,9 +347,6 @@ export const paymentAPI = {
   confirmPayment: (paymentId: number) =>
     api.post(`/payment/payments/${paymentId}/confirm_payment/`),
   getPayments: () => api.get('/payment/payments/'),
-  getWithdrawals: () => api.get('/payment/withdrawals/'),
-  approveWithdrawal: (id: number) => api.post(`/payment/withdrawals/${id}/approve/`),
-  rejectWithdrawal: (id: number, reason?: string) => api.post(`/payment/withdrawals/${id}/reject/`, { reason }),
 };
 
 export const posAPI = {
